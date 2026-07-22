@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>JP — 日語主動學習</title>
+  <meta name="description" content="自己建卡、間隔重複複習的日語學習 App" />
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#3B7A57" />
+  <link rel="apple-touch-icon" href="./icons/icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="app-bar">
+    <h1>JP</h1>
+    <span id="stats" class="stats"></span>
+    <div class="app-bar-actions">
+      <button id="btn-ai" class="icon-btn" title="問 AI">💬</button>
+      <button id="btn-quiz" class="icon-btn" title="測驗">📝</button>
+      <button id="btn-tags" class="icon-btn" title="管理標籤">🏷</button>
+      <button id="btn-settings" class="icon-btn" title="設定">⚙</button>
+      <button id="btn-add" class="add-btn">＋ 新增卡片</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 卡片列表 -->
+    <section id="list-view">
+      <div class="filters">
+        <div class="filter-row" id="type-filters">
+          <button class="chip-btn active" data-type="all">全部</button>
+          <button class="chip-btn" data-type="vocab">單字</button>
+          <button class="chip-btn" data-type="grammar">文法</button>
+        </div>
+        <div class="filter-row" id="tag-filters"></div>
+      </div>
+      <ul id="card-list" class="card-list"></ul>
+    </section>
+  </main>
+
+  <!-- 新增／編輯表單 -->
+  <div id="edit-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="edit-cancel" class="text-btn">取消</button>
+        <span id="edit-title" class="sheet-title">新增卡片</span>
+        <button id="edit-save" class="text-btn primary">儲存</button>
+      </div>
+      <div class="sheet-body">
+        <label class="fld">類型
+          <div class="seg" id="fld-type">
+            <button type="button" class="seg-btn active" data-val="vocab">單字</button>
+            <button type="button" class="seg-btn" data-val="grammar">文法</button>
+          </div>
+        </label>
+        <label class="fld" id="fld-pos-wrap">詞性
+          <select id="fld-pos">
+            <option value="">（未指定）</option>
+            <option value="名詞">名詞</option>
+            <option value="動詞">動詞</option>
+            <option value="形容詞">形容詞（い/な）</option>
+            <option value="副詞">副詞</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+        <label class="fld">日文（單字／句型）
+          <input id="fld-jp" type="text" placeholder="例：頭 / 〜てもいい" />
+        </label>
+        <label class="fld">讀音（假名）
+          <input id="fld-reading" type="text" placeholder="例：あたま" />
+          <span id="romaji-preview" class="romaji-preview"></span>
+        </label>
+        <label class="fld">中文意思
+          <input id="fld-meaning" type="text" placeholder="例：頭" />
+        </label>
+
+        <div class="fld">例句
+          <div id="examples"></div>
+          <button type="button" id="btn-add-example" class="mini-btn">＋ 新增例句</button>
+        </div>
+
+        <button type="button" id="btn-auto-furi" class="auto-btn">✨ 自動注音／羅馬拼音（kuromoji）</button>
+        <button type="button" id="btn-ai-assist" class="auto-btn ai">🤖 AI 協助補完（可指定只補哪裡）</button>
+
+        <div class="fld">標籤（點選，可複選）
+          <div id="fld-tags-chips" class="tag-select"></div>
+        </div>
+
+        <button id="edit-delete" class="danger-btn" hidden>刪除這張卡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 學習卡詳情 -->
+  <div id="detail-overlay" class="overlay" hidden>
+    <div class="sheet card-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="detail-close" class="text-btn">關閉</button>
+        <span id="detail-tags" class="detail-tags"></span>
+        <button id="detail-edit" class="text-btn primary">編輯</button>
+      </div>
+      <div class="study-card" id="study-card"></div>
+    </div>
+  </div>
+
+  <!-- 標籤管理 -->
+  <div id="tags-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="tags-close" class="text-btn">關閉</button>
+        <span class="sheet-title">管理標籤</span>
+        <span class="head-spacer"></span>
+      </div>
+      <div class="sheet-body">
+        <div class="add-tag-row">
+          <input id="new-tag-input" type="text" placeholder="新標籤名稱（例：N5、動物、おぼえたい）" />
+          <button id="new-tag-add" class="mini-btn">＋ 新增</button>
+        </div>
+        <ul id="tag-manage-list" class="tag-manage-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 測驗設定 -->
+  <div id="quiz-setup-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="qs-cancel" class="text-btn">取消</button>
+        <span class="sheet-title">測驗設定</span>
+        <button id="qs-start" class="text-btn primary">開始</button>
+      </div>
+      <div class="sheet-body">
+        <div class="fld">範圍
+          <div class="seg" id="qs-type">
+            <button type="button" class="seg-btn active" data-val="all">全部</button>
+            <button type="button" class="seg-btn" data-val="vocab">單字</button>
+            <button type="button" class="seg-btn" data-val="grammar">文法</button>
+          </div>
+        </div>
+        <div class="fld">模式（可複選）
+          <div class="tag-select" id="qs-modes">
+            <button type="button" class="tag-chip on" data-mode="read">讀（看→選意思）</button>
+            <button type="button" class="tag-chip on" data-mode="listen">聽（聽發音→選意思）</button>
+            <button type="button" class="tag-chip on" data-mode="write">寫（看中文→寫日文）</button>
+          </div>
+        </div>
+        <div class="fld">標籤篩選（可複選，空＝不限）
+          <div class="tag-select" id="qs-tags"></div>
+        </div>
+        <p id="qs-info" class="qs-info"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 測驗進行 -->
+  <div id="quiz-overlay" class="overlay quiz-overlay" hidden>
+    <div class="quiz-panel">
+      <div class="quiz-top">
+        <button id="quiz-exit" class="text-btn">← 離開</button>
+        <span id="quiz-progress" class="quiz-progress"></span>
+        <span id="quiz-eye" class="quiz-eye"></span>
+      </div>
+      <div id="quiz-body" class="quiz-body"></div>
+      <button id="quiz-continue" class="continue-btn" hidden>繼續 →</button>
+    </div>
+  </div>
+
+  <!-- 測驗結果 -->
+  <div id="quiz-done-overlay" class="overlay" hidden>
+    <div class="sheet">
+      <div class="done-box">
+        <div class="done-emoji">🎉</div>
+        <p id="quiz-score" class="done-score"></p>
+        <button id="quiz-done-back" class="add-btn">回到列表</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 首次啟用引導 -->
+  <div id="onboard-overlay" class="overlay" hidden>
+    <div class="sheet">
+      <div class="sheet-body">
+        <h2 class="ob-title">要不要接上 AI？</h2>
+        <p class="ob-text">接上後可以：叫 AI 幫你補中文／例句（可指定只補哪裡）、隨時問日語問題。<br>
+          用你自己的 API key（存在這台裝置，不會上傳程式碼庫）。<br>
+          <b>不接也完全能用</b>——手動輸入＋自動注音都不需要 AI。</p>
+        <div class="ob-btns">
+          <button id="ob-yes" class="add-btn">去設定 AI</button>
+          <button id="ob-no" class="text-btn">先不要</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 設定 -->
+  <div id="settings-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="set-close" class="text-btn">關閉</button>
+        <span class="sheet-title">AI 設定</span>
+        <button id="set-save" class="text-btn primary">儲存</button>
+      </div>
+      <div class="sheet-body">
+        <p class="set-note">key 只存在這台裝置（localStorage），不會進程式碼庫。內容會傳給你選的 AI 供應商。</p>
+        <label class="fld">供應商
+          <select id="set-provider">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI 相容（含多數第三方）</option>
+            <option value="anthropic">Anthropic Claude</option>
+          </select>
+        </label>
+        <label class="fld">API Key
+          <input id="set-key" type="password" placeholder="貼上你的 API key" />
+        </label>
+        <label class="fld">模型
+          <input id="set-model" type="text" placeholder="例：gemini-flash-latest（留空即用此預設）" />
+        </label>
+        <label class="fld">Endpoint（進階，留空用預設）
+          <input id="set-endpoint" type="text" placeholder="留空即可" />
+        </label>
+        <button id="set-test" class="auto-btn">測試連線</button>
+        <p id="set-test-result" class="set-test-result"></p>
+        <p class="set-hint">Gemini 免費 key 申請：aistudio.google.com</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 指示式補完（預覽再套用） -->
+  <div id="assist-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="assist-close" class="text-btn">取消</button>
+        <span class="sheet-title">AI 協助補完</span>
+        <button id="assist-run" class="text-btn primary">送出</button>
+      </div>
+      <div class="sheet-body">
+        <label class="fld">指示（用中文說要補哪、不要動哪）
+          <textarea id="assist-instruction" rows="2" placeholder="例：只補例句的中文翻譯，其他都不要動"></textarea>
+        </label>
+        <p id="assist-status" class="assist-status"></p>
+        <div id="assist-preview" class="assist-preview"></div>
+        <button id="assist-apply" class="add-btn" hidden>套用勾選的變更</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 問答（卡內／全域共用） -->
+  <div id="chat-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <button id="chat-close" class="text-btn">關閉</button>
+        <span id="chat-title" class="sheet-title">問 AI</span>
+        <span class="head-spacer"></span>
+      </div>
+      <div class="sheet-body">
+        <div id="chat-context" class="chat-context"></div>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="chat-input-row">
+          <textarea id="chat-input" rows="2" placeholder="輸入你的問題…"></textarea>
+          <button id="chat-send" class="add-btn">送出</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

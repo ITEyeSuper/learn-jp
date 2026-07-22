@@ -1,0 +1,8 @@
+# 參考資料（下載的他人專案，不進本專案 git / 部署）
+_ref/
+japanese-learner-main/
+japanese-learner-main.zip
+
+# npm（kuromoji 已把需要的 build/dict 複製進 vendor/ 與 dict/，不需 node_modules）
+node_modules/
+package-lock.json

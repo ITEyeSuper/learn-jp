@@ -1,0 +1,15 @@
+{
+  "name": "JP 日語主動學習",
+  "short_name": "JP",
+  "description": "自己建卡、間隔重複複習的日語學習 App",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF8F2",
+  "theme_color": "#3B7A57",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
