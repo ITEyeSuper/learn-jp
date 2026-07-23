@@ -198,7 +198,69 @@ body.hide-romaji .eye-open { display: none; }
 body.hide-romaji .eye-off { display: inline; }
 .study-card { position: relative; }
 .study-card > .eye-toggle { position: absolute; top: 6px; right: 8px; z-index: 1; }
+.study-card > .tts-switch { position: absolute; top: 8px; left: 8px; z-index: 1; background: var(--surface-2); color: var(--accent); border: 1px solid var(--line); border-radius: 100px; padding: 4px 11px; font-size: .72rem; font-weight: 700; cursor: pointer; }
+.study-card > .tts-switch:active { background: var(--line); }
 .quiz-eye { display: inline-flex; }
+
+/* 線條 SVG 圖示（取代 emoji） */
+.ic { display: block; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,.22); }
+.add-btn { display: inline-flex; align-items: center; gap: 6px; }
+.speak { color: var(--accent); }
+.speak svg { display: block; }
+.speak.big { color: var(--accent); }
+.card-ask-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* iOS 風開關 */
+.switch {
+  -webkit-appearance: none; appearance: none; flex-shrink: 0; border: 0;
+  width: 46px; height: 28px; border-radius: 100px; background: var(--line);
+  position: relative; cursor: pointer; transition: background .2s;
+}
+.switch:checked { background: var(--accent); }
+.switch::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .2s;
+}
+.switch:checked::after { left: 21px; }
+
+/* 設定：分組清單 */
+#settings-home { gap: 0; }
+.set-group-label { font-size: .8rem; color: var(--muted); font-weight: 700; margin: 16px 4px 6px; }
+.set-group-label:first-child { margin-top: 0; }
+.set-list { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.set-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 14px; background: none; border: 0; border-bottom: 1px solid var(--line);
+  color: var(--ink); font-size: 1rem; font-weight: 500; text-align: left; cursor: pointer; font-family: inherit;
+}
+.set-item:last-child { border-bottom: 0; }
+.set-item.nav:active { background: var(--surface-2); }
+.set-item select { font-size: 1rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.set-chev { color: var(--muted); font-size: 1.4rem; line-height: 1; }
+
+/* 分頁列 */
+.pager { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 18px 0 4px; }
+.pg-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-size: 1.4rem; line-height: 1; cursor: pointer; }
+.pg-btn:disabled { color: var(--muted); opacity: .4; cursor: default; }
+.pg-info { color: var(--ink-soft); font-size: .95rem; font-variant-numeric: tabular-nums; min-width: 56px; text-align: center; }
+
+/* 有新版本提示橫幅（固定在底部） */
+.update-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: var(--ink); color: #fff; font-size: .92rem; box-shadow: 0 -2px 10px rgba(0,0,0,.25);
+}
+.update-bar button {
+  background: var(--accent); color: #fff; border: 0; padding: 8px 16px;
+  border-radius: 100px; font-weight: 700; font-size: .9rem; cursor: pointer;
+}
+
+/* 設定：備份／還原 */
+.set-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.backup-row { display: flex; gap: 10px; }
+.backup-row .auto-btn { flex: 1; }
 
 /* ── 手機版：避免 header 擠爆造成橫向跑版 ── */
 @media (max-width: 480px) {

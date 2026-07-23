@@ -56,6 +56,36 @@ export function deleteCard(cards, id) {
   return cards;
 }
 
+/**
+ * 依建立時間排序（純函式，不改原陣列）
+ * @param {Array} cards 卡片
+ * @param {boolean} [newestFirst=true] true＝最新在前
+ * @returns {Array} 排序後的新陣列
+ */
+export function sortByNewest(cards, newestFirst = true) {
+  const arr = cards.slice();
+  arr.sort((a, b) => {
+    const cmp = String(a.created || '').localeCompare(String(b.created || ''));
+    return newestFirst ? -cmp : cmp;
+  });
+  return arr;
+}
+
+/**
+ * 取某一頁的卡片（純函式）
+ * @param {Array} items 已排序的卡片
+ * @param {number} page 目前頁碼（1 起算，超界會自動夾住）
+ * @param {number} size 每頁張數
+ * @returns {{page:number, totalPages:number, items:Array}}
+ */
+export function paginate(items, page, size) {
+  const per = Math.max(1, Number(size) || 20);
+  const totalPages = Math.max(1, Math.ceil(items.length / per));
+  const p = Math.min(Math.max(1, Number(page) || 1), totalPages);
+  const start = (p - 1) * per;
+  return { page: p, totalPages, items: items.slice(start, start + per) };
+}
+
 /** 取得所有用過的標籤（去重、排序） */
 export function allTags(cards) {
   const set = new Set();
@@ -97,14 +127,53 @@ export function saveSettings(s) {
   localStorage.setItem(KEY_SETTINGS, JSON.stringify(s));
 }
 
-// ── 備份 ──
+// ── 備份／還原 ──
+const BACKUP_VERSION = 1;
+
+/**
+ * 匯出全部資料為備份 JSON 字串（卡片＋標籤；不含 AI key，避免備份檔外流金鑰）
+ * @returns {string} 可下載成檔的 JSON 文字
+ */
 export function exportAll() {
-  return JSON.stringify({ cards: loadCards(), exportedAt: new Date().toISOString() }, null, 2);
+  return JSON.stringify({
+    app: 'JP', version: BACKUP_VERSION, exportedAt: new Date().toISOString(),
+    cards: loadCards(), tags: loadTagList(),
+  }, null, 2);
 }
+
+/**
+ * 匯入備份：以 id 合併卡片，標籤取聯集。合併而非取代 → 不會刪除現有卡片。
+ * 同 id 時採「較新的為準」（比對 updated 時間戳）：匯入的較新才覆蓋，否則保留現有，
+ * 避免拿舊備份把裝置上較新的編輯／學習進度(srs)蓋掉。
+ * @param {string} text 備份 JSON 文字
+ * @returns {{ok:boolean, added:number, updated:number, skipped:number, error?:string}}
+ */
 export function importAll(text) {
-  try {
-    const data = JSON.parse(text);
-    if (Array.isArray(data.cards)) { saveCards(data.cards); return true; }
-    return false;
-  } catch { return false; }
+  const fail = (error) => ({ ok: false, added: 0, updated: 0, skipped: 0, error });
+  let data;
+  try { data = JSON.parse(text); } catch { return fail('不是有效的 JSON 檔'); }
+  if (!data || !Array.isArray(data.cards)) return fail('檔案內找不到 cards 卡片陣列');
+  const cards = loadCards();
+  const idIndex = new Map(cards.map((c, i) => [c.id, i]));
+  let added = 0;
+  let updated = 0;
+  let skipped = 0;
+  for (const c of data.cards) {
+    if (!c || typeof c !== 'object') continue;
+    if (!c.id) c.id = uid();                 // 沒 id 的一律當新卡
+    if (idIndex.has(c.id)) {
+      const cur = cards[idIndex.get(c.id)];
+      // 現有卡沒時間戳、或匯入的較新（含相同）→ 覆蓋；否則保留現有
+      if (!cur.updated || (c.updated && c.updated >= cur.updated)) { cards[idIndex.get(c.id)] = c; updated += 1; }
+      else skipped += 1;
+    } else { idIndex.set(c.id, cards.length); cards.push(c); added += 1; }
+  }
+  try { saveCards(cards); }
+  catch (e) { return fail('儲存失敗（可能空間不足）：' + e.message); } // QuotaExceededError 等 → 不靜默
+  // 標籤：備份檔的標籤 ∪ 目前標籤 ∪ 卡片實際用到的標籤
+  const tags = loadTagList();
+  (Array.isArray(data.tags) ? data.tags : []).forEach((t) => { if (t && !tags.includes(t)) tags.push(t); });
+  allTags(cards).forEach((t) => { if (!tags.includes(t)) tags.push(t); });
+  try { saveTagList(tags); } catch (e) { console.error('[importAll] 標籤寫入失敗（卡片已存）', e); }
+  return { ok: true, added, updated, skipped };
 }

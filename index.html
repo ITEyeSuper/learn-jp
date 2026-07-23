@@ -23,6 +23,12 @@
     </div>
   </header>
 
+  <!-- 有新版本提示（Service Worker 偵測到更新時顯示） -->
+  <div id="update-bar" class="update-bar" hidden>
+    <span>🔄 有新版本可用</span>
+    <button id="update-reload" type="button">立即更新</button>
+  </div>
+
   <main>
     <!-- 卡片列表 -->
     <section id="list-view">
@@ -35,6 +41,7 @@
         <div class="filter-row" id="tag-filters"></div>
       </div>
       <ul id="card-list" class="card-list"></ul>
+      <div id="pager" class="pager" hidden></div>
     </section>
   </main>
 
@@ -95,9 +102,9 @@
   <div id="detail-overlay" class="overlay" hidden>
     <div class="sheet card-sheet" role="dialog" aria-modal="true">
       <div class="sheet-head">
-        <button id="detail-close" class="text-btn">關閉</button>
+        <button id="detail-edit" class="text-btn">編輯</button>
         <span id="detail-tags" class="detail-tags"></span>
-        <button id="detail-edit" class="text-btn primary">編輯</button>
+        <button id="detail-close" class="text-btn primary">關閉</button>
       </div>
       <div class="study-card" id="study-card"></div>
     </div>
@@ -192,15 +199,63 @@
     </div>
   </div>
 
-  <!-- AI 設定 -->
+  <!-- 設定（分組清單首頁 + AI 子頁）-->
   <div id="settings-overlay" class="overlay" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-head">
-        <button id="set-close" class="text-btn">關閉</button>
-        <span class="sheet-title">AI 設定</span>
-        <button id="set-save" class="text-btn primary">儲存</button>
+        <button id="set-back" class="text-btn" hidden>‹ 返回</button>
+        <span id="set-head-spacer" class="head-spacer"></span>
+        <span id="set-title" class="sheet-title">設定</span>
+        <button id="set-save" class="text-btn primary" hidden>儲存</button>
+        <button id="set-close" class="text-btn primary">關閉</button>
       </div>
-      <div class="sheet-body">
+
+      <!-- 首頁：分組清單 -->
+      <div class="sheet-body" id="settings-home">
+        <div class="set-group-label">顯示</div>
+        <div class="set-list">
+          <label class="set-item">
+            <span>最新卡片放最上面</span>
+            <input type="checkbox" id="set-newest" class="switch" />
+          </label>
+          <label class="set-item">
+            <span>每頁顯示張數</span>
+            <select id="set-pagesize">
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="set-group-label">語音</div>
+        <div class="set-list">
+          <button type="button" class="set-item nav" id="set-open-tts">
+            <span>發音語音（內建／Google Cloud）</span>
+            <span class="set-chev">›</span>
+          </button>
+        </div>
+
+        <div class="set-group-label">AI</div>
+        <div class="set-list">
+          <button type="button" class="set-item nav" id="set-open-ai">
+            <span>綁定 AI（Gemini…）</span>
+            <span class="set-chev">›</span>
+          </button>
+        </div>
+
+        <div class="set-group-label">資料備份（換手機或清資料前務必先匯出）</div>
+        <div class="set-list">
+          <button type="button" class="set-item nav" id="btn-export"><span>匯出備份</span><span class="set-chev">›</span></button>
+          <button type="button" class="set-item nav" id="btn-import"><span>匯入備份</span><span class="set-chev">›</span></button>
+        </div>
+        <p class="set-hint">匯出可存到「檔案 → Google Drive／iCloud」。匯入採合併，不會刪除現有卡片；相同卡片以較新的為準。</p>
+        <input id="import-file" type="file" accept="application/json,.json" hidden />
+      </div>
+
+      <!-- 子頁：AI 綁定 -->
+      <div class="sheet-body" id="settings-ai" hidden>
         <p class="set-note">key 只存在這台裝置（localStorage），不會進程式碼庫。內容會傳給你選的 AI 供應商。</p>
         <label class="fld">供應商
           <select id="set-provider">
@@ -221,6 +276,36 @@
         <button id="set-test" class="auto-btn">測試連線</button>
         <p id="set-test-result" class="set-test-result"></p>
         <p class="set-hint">Gemini 免費 key 申請：aistudio.google.com</p>
+      </div>
+
+      <!-- 子頁：語音發音 -->
+      <div class="sheet-body" id="settings-tts" hidden>
+        <label class="fld">語音引擎
+          <select id="tts-engine">
+            <option value="web">內建語音（免費、離線）</option>
+            <option value="gcloud">Google Cloud TTS（較自然，需自備 key）</option>
+          </select>
+        </label>
+
+        <div id="tts-web-box">
+          <label class="fld">內建日語語音
+            <select id="tts-voice-web"></select>
+          </label>
+          <p class="set-hint">iOS 到「設定 → 輔助使用 → 朗讀內容 → 語音 → 日文」下載「加強版（Enhanced）」語音後，這裡會多出更自然的選項；ん、っ、整句語調都會明顯變好。</p>
+        </div>
+
+        <div id="tts-cloud-box" hidden>
+          <label class="fld">Google Cloud TTS API Key
+            <input id="tts-key" type="password" placeholder="貼上你的 Cloud TTS API key" />
+          </label>
+          <label class="fld">雲端語音
+            <select id="tts-voice-cloud"></select>
+          </label>
+          <p class="set-hint">需在 Google Cloud 開通計費並啟用 Text-to-Speech API（每月有免費額度，實際計費請自行確認）。呼叫失敗會自動退回內建語音。key 只存這台裝置。</p>
+        </div>
+
+        <button id="tts-test" class="auto-btn">🔊 測試語音</button>
+        <p id="tts-test-result" class="set-test-result"></p>
       </div>
     </div>
   </div>
