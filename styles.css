@@ -19,7 +19,7 @@
 :root[data-theme="dark"] { --bg:#16191C; --surface:#1E2227; --surface-2:#262B31; --ink:#ECEAE3; --ink-soft:#BCC0C7; --muted:#868C95; --line:#2C323A; --accent:#6FB58C; --accent-soft:#17251D; --red:#E56A54; --good:#6FB58C; --good-bg:#16251D; --wrong:#E56A54; --wrong-bg:#2E1D19; }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
@@ -199,5 +199,22 @@ body.hide-romaji .eye-off { display: inline; }
 .study-card { position: relative; }
 .study-card > .eye-toggle { position: absolute; top: 6px; right: 8px; z-index: 1; }
 .quiz-eye { display: inline-flex; }
+
+/* ── 手機版：避免 header 擠爆造成橫向跑版 ── */
+@media (max-width: 480px) {
+  .app-bar { gap: 6px; padding-left: 12px; padding-right: 12px; }
+  .app-bar h1 { font-size: 1.1rem; }
+  .stats { display: none; }                 /* 手機隱藏張數，把空間讓給按鈕 */
+  .app-bar-actions { display: flex; align-items: center; }
+  .icon-btn { width: 34px; height: 34px; font-size: .98rem; margin-right: 3px; }
+  .add-btn { padding: 8px 11px; font-size: .8rem; white-space: nowrap; }
+  main { padding: 12px 12px 40px; }
+  .study-card .sc-jp { font-size: 2.2rem; }
+  .study-card .sc-ex-jp { font-size: 1.3rem; }
+  .q-jp { font-size: 2rem; }
+  .q-zh { font-size: 1.4rem; }
+  /* 例句欄位與長字換行，不撐破卡片 */
+  .card-row .cr-jp { min-width: 64px; word-break: break-word; }
+}
 
 [hidden] { display: none !important; }
