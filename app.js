@@ -59,15 +59,6 @@ const ICON_PATHS = {
 function svgIcon(name, size = 20, cls = '') {
   return `<svg class="ic ${cls}" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`;
 }
-/** 把靜態頂部按鈕的 emoji 換成 SVG 圖示 */
-function renderTopIcons() {
-  document.getElementById('btn-ai').innerHTML = svgIcon('chat');
-  document.getElementById('btn-quiz').innerHTML = svgIcon('quiz');
-  document.getElementById('btn-tags').innerHTML = svgIcon('tag');
-  document.getElementById('btn-settings').innerHTML = svgIcon('settings');
-  document.getElementById('btn-add').innerHTML = svgIcon('plus', 18) + '<span>新增卡片</span>';
-}
-
 /** 切換羅馬拼音顯示（全域、記憶） */
 function toggleRomaji() {
   const on = document.body.classList.toggle('hide-romaji');
@@ -87,7 +78,6 @@ function init() {
   initWebVoices(() => { // 語音清單就緒後，若正停在語音設定子頁就刷新選單
     if (!document.getElementById('settings-tts').hidden) populateWebVoices();
   });
-  renderTopIcons();
   bindEvents();
   if (settings.hideRomaji) document.body.classList.add('hide-romaji');
   document.getElementById('quiz-eye').innerHTML = EYE_BTN;
@@ -478,7 +468,13 @@ function bindEvents() {
   document.getElementById('tts-engine').addEventListener('change', toggleTtsBoxes);
   document.getElementById('tts-test').addEventListener('click', testTts);
   document.getElementById('set-newest').addEventListener('change', onToggleNewest);
-  document.getElementById('set-pagesize').addEventListener('change', onChangePageSize);
+  document.getElementById('set-pagesize').addEventListener('change', applyPageSize);
+  document.getElementById('pagesize-chips').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-n]');
+    if (!b) return;
+    document.getElementById('set-pagesize').value = b.dataset.n;
+    applyPageSize();
+  });
   document.getElementById('settings-overlay').addEventListener('click', (e) => { if (e.target.id === 'settings-overlay') closeSettings(); });
 
   // 備份／還原
@@ -643,8 +639,14 @@ function openSettings() {
   // 首頁「顯示」設定
   document.getElementById('set-newest').checked = settings.newestFirst !== false;
   document.getElementById('set-pagesize').value = String(pageSize());
+  markPageSizeChip();
   showSettingsView('home');
   document.getElementById('settings-overlay').hidden = false;
+}
+/** 標記目前每頁張數對應的快選 chip */
+function markPageSizeChip() {
+  const v = String(pageSize());
+  document.querySelectorAll('#pagesize-chips button').forEach((b) => b.classList.toggle('on', b.dataset.n === v));
 }
 function closeSettings() { document.getElementById('settings-overlay').hidden = true; showSettingsView('home'); }
 
@@ -735,10 +737,16 @@ function onToggleNewest(e) {
   currentPage = 1;
   renderList();
 }
-/** 顯示設定：每頁張數（即時套用） */
-function onChangePageSize(e) {
-  settings.pageSize = Number(e.target.value) || DEFAULT_PAGE_SIZE;
+/** 顯示設定：每頁張數（讀 input 現值，夾在 1~200，即時套用） */
+function applyPageSize() {
+  const inp = document.getElementById('set-pagesize');
+  let n = Math.floor(Number(inp.value));
+  if (!Number.isFinite(n) || n < 1) n = DEFAULT_PAGE_SIZE;
+  n = Math.min(200, n);
+  inp.value = String(n);
+  settings.pageSize = n;
   saveSettings(settings);
+  markPageSizeChip();
   currentPage = 1;
   renderList();
 }
@@ -765,7 +773,8 @@ function onboardNo() { settings.aiOnboarded = true; saveSettings(settings); docu
 let assistProposed = null;
 function openAssist() {
   if (!hasAI(settings)) { if (confirm('尚未設定 AI，前往設定？')) openSettings(); return; }
-  document.getElementById('assist-instruction').value = '';
+  // 預設指示＝補空白（直接按送出就會補空欄、不動已填的），使用者可自行改寫
+  document.getElementById('assist-instruction').value = '把空白的欄位幫我補齊，已經有內容的不要更動。';
   document.getElementById('assist-status').textContent = '';
   document.getElementById('assist-preview').innerHTML = '';
   document.getElementById('assist-apply').hidden = true;

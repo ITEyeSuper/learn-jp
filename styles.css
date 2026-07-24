@@ -238,6 +238,12 @@ body.hide-romaji .eye-off { display: inline; }
 .set-item.nav:active { background: var(--surface-2); }
 .set-item select { font-size: 1rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .set-chev { color: var(--muted); font-size: 1.4rem; line-height: 1; }
+.set-item.set-col { flex-direction: column; align-items: stretch; gap: 10px; }
+.pagesize-ctl { display: flex; flex-direction: column; gap: 8px; }
+#set-pagesize { width: 96px; font-size: 1rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.pagesize-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pagesize-chips button { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); border-radius: 100px; padding: 6px 14px; font-size: .85rem; font-weight: 600; cursor: pointer; }
+.pagesize-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* 分頁列 */
 .pager { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 18px 0 4px; }
