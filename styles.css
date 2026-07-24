@@ -56,8 +56,10 @@ main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
 .card-row .cr-reading { font-size: .72rem; color: var(--accent); display: block; font-weight: 400; }
 .card-row .cr-meaning { flex: 1; color: var(--ink-soft); font-size: .95rem; }
 .card-row .cr-badge { font-size: .68rem; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
-.speak { background: var(--surface-2); border: 1px solid var(--line); width: 40px; height: 40px; border-radius: 50%; font-size: 1.05rem; cursor: pointer; flex-shrink: 0; display: grid; place-items: center; }
-.speak:active { background: var(--line); }
+/* 喇叭：裸圖示、無圈圈，靠近文字 */
+.speak { background: transparent; border: 0; padding: 5px; border-radius: 8px; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
+.speak:active { background: var(--surface-2); }
+.speak svg { display: block; width: 22px; height: 22px; }
 .empty-hint { color: var(--muted); text-align: center; padding: 48px 20px; list-style: none; }
 .empty-hint b { color: var(--ink); }
 
@@ -109,9 +111,10 @@ main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
 .detail-tags { font-size: .72rem; color: var(--muted); flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 
-/* 標籤鈕 */
-.icon-btn { background: rgba(255,255,255,.18); color: #fff; border: 0; width: 38px; height: 38px; border-radius: 10px; font-size: 1.05rem; cursor: pointer; margin-right: 6px; }
-.icon-btn:active { background: rgba(255,255,255,.32); }
+/* 頂部圖示鈕：透明底（白圖示配綠底才清楚）、圖示放大 */
+.icon-btn { background: transparent; color: #fff; border: 0; width: 40px; height: 40px; border-radius: 10px; cursor: pointer; margin-right: 2px; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn svg { width: 25px; height: 25px; }
+.icon-btn:active { background: rgba(255,255,255,.22); }
 .head-spacer { width: 40px; }
 
 /* 表單標籤選擇 */
@@ -141,7 +144,8 @@ ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 .q-jp { font-size: 2.4rem; font-weight: 800; }
 .q-reading { color: var(--accent); font-size: 1rem; margin-top: 4px; }
 .q-zh { font-size: 1.6rem; font-weight: 700; }
-.speak.big { width: 72px; height: 72px; font-size: 2rem; }
+.speak.big { padding: 10px; }
+.speak.big svg { width: 46px; height: 46px; }
 .q-write { width: 100%; box-sizing: border-box; font-size: 1.3rem; text-align: center; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); margin-bottom: 12px; }
 .q-reveal { margin-top: 16px; text-align: center; }
 .q-ans { font-size: 1.1rem; color: var(--ink-soft); }
@@ -202,13 +206,9 @@ body.hide-romaji .eye-off { display: inline; }
 .study-card > .tts-switch:active { background: var(--line); }
 .quiz-eye { display: inline-flex; }
 
-/* 線條 SVG 圖示（取代 emoji） */
+/* 線條 SVG 圖示 */
 .ic { display: block; }
-.icon-btn { display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,.22); }
 .add-btn { display: inline-flex; align-items: center; gap: 6px; }
-.speak { color: var(--accent); }
-.speak svg { display: block; }
-.speak.big { color: var(--accent); }
 .card-ask-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
 
 /* iOS 風開關 */
@@ -274,7 +274,8 @@ body.hide-romaji .eye-off { display: inline; }
   .app-bar h1 { font-size: 1.1rem; }
   .stats { display: none; }                 /* 手機隱藏張數，把空間讓給按鈕 */
   .app-bar-actions { display: flex; align-items: center; }
-  .icon-btn { width: 34px; height: 34px; font-size: .98rem; margin-right: 3px; }
+  .icon-btn { width: 38px; height: 38px; margin-right: 1px; }
+  .icon-btn svg { width: 24px; height: 24px; }
   .add-btn { padding: 8px 11px; font-size: .8rem; white-space: nowrap; }
   main { padding: 12px 12px 40px; }
   .study-card .sc-jp { font-size: 2.2rem; }
