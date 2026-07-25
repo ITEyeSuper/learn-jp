@@ -25,6 +25,9 @@ eq('語言碼', cloudBody('あ').voice.languageCode, 'ja-JP');
 eq('帶入文字', cloudBody('明後日').input.text, '明後日');
 eq('指定語音', cloudBody('あ', 'ja-JP-Wavenet-C').voice.name, 'ja-JP-Wavenet-C');
 eq('音訊格式 MP3', cloudBody('あ').audioConfig.audioEncoding, 'MP3');
+eq('指定語言碼（中文段）', cloudBody('你好', 'cmn-TW-Standard-A', 'cmn-TW').voice.languageCode, 'cmn-TW');
+eq('指定中文語音', cloudBody('你好', 'cmn-TW-Standard-A', 'cmn-TW').voice.name, 'cmn-TW-Standard-A');
+eq('未給語言碼 → 預設 ja-JP', cloudBody('あ', 'ja-JP-Neural2-B').voice.languageCode, 'ja-JP');
 
 console.log('\n■ cloudVoices');
 const vs = cloudVoices();

@@ -275,8 +275,11 @@ body.hide-romaji .eye-off { display: inline; }
 /* 連續朗讀 */
 .read-btn { align-self: flex-start; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); padding: 5px 12px; border-radius: 100px; font-size: .82rem; font-weight: 700; cursor: pointer; }
 .reader-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--ink); color: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,.25); }
-.reader-now { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-now { flex: 1; min-width: 0; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-bar button { background: var(--red); color: #fff; border: 0; padding: 8px 18px; border-radius: 100px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+.reader-bar #reader-pause { background: rgba(255,255,255,.22); }
+/* 設定：文字＋開關同列（如 TTS 鎖屏播放） */
+.fld-check { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0; font-size: .92rem; color: var(--ink); cursor: pointer; }
 
 /* AI 健檢正中央視窗 */
 .overlay.center { align-items: center; padding: 16px; z-index: 55; }

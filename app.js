@@ -3,7 +3,7 @@ import { toRomaji } from './romaji.js';
 import { analyze } from './jlp.js';
 import { isDue, applyResult, todayISO, buildQuizItems, isLeech, everWrongCards } from './srs.js';
 import { askAI, askVision, hasAI } from './ai.js';
-import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud, playSequence } from './tts.js';
+import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud, playSequence, playAudioSequence } from './tts.js';
 import {
   loadCards, upsertCard, deleteCard, allTags,
   loadTagList, saveTagList, addTagToList, removeTagFromList,
@@ -118,19 +118,107 @@ function buildReadQueue() {
   }
   return steps;
 }
+/** 更新播放列上「目前朗讀」文字 */
+function showReaderNow(step) {
+  document.getElementById('reader-now').textContent = `🎧 ${step.jp}　${step.meaning}`;
+}
+/**
+ * 開始連續朗讀：使用者「主動開啟」鎖屏開關且有雲端 key → 走 playAudioSequence（真音檔、鎖屏可續播）；
+ * 否則（預設）退回免費的 web playSequence（離線、但 iOS 鎖屏會暫停）。
+ * 走雲端（付費）前會一次性確認額度使用，之後不再打擾。
+ */
 function startReadAloud() {
   if (reader) stopReadAloud();            // 先停掉正在進行的，避免兩條語音疊播
   const steps = buildReadQueue();
   if (steps.length === 0) { alert('目前清單沒有可朗讀的卡片。'); return; }
+  // 鎖屏版為「選擇性開啟」（opt-in）：預設關，行為與舊版相同；只有使用者主動打開開關且有雲端 key 才啟用。
+  const lockCapable = settings.lockScreenRead === true && !!settings.ttsKey;
+  if (settings.lockScreenRead === true && !settings.ttsKey && !settings.lockNoKeyHintShown) {
+    // 已開啟鎖屏開關卻沒設定雲端 key → 提示一次（仍會用免費內建版朗讀，只是鎖屏會停）
+    alert('要「鎖屏也能播放」需先在 設定 → 語音發音 填入 Google Cloud TTS key。\n目前先用內建語音朗讀（螢幕鎖定時會暫停）。');
+    settings.lockNoKeyHintShown = true; saveSettings(settings);
+  }
+  // 首次使用雲端連續朗讀前，確認一次「會用到雲端額度」（成本透明；實際計費以 Google Cloud 帳單為準）
+  if (lockCapable && !settings.lockReadConfirmed) {
+    const ok = confirm(`「鎖屏連續朗讀」會用 Google Cloud TTS 合成語音，這趟約 ${steps.length} 段。\n每月有免費額度，超過才計費（USD，以 Google 官方帳單為準）；同一句已快取不重複計費。\n要開始嗎？（可到 設定 → 語音發音 關閉此功能改用免費內建語音）`);
+    if (!ok) return;
+    settings.lockReadConfirmed = true; saveSettings(settings);
+  }
   document.getElementById('reader-bar').hidden = false;
-  reader = playSequence(steps, {
-    onstep: (s) => { document.getElementById('reader-now').textContent = `🎧 ${s.jp}　${s.meaning}`; },
-    ondone: () => stopReadAloud(),
-  });
+  if (lockCapable) {
+    reader = playAudioSequence(steps, settings, {
+      onstep: (step) => { showReaderNow(step); setMediaMetadata(step); },
+      ondone: () => stopReadAloud(),
+      onerror: (e) => console.warn('[read] 雲端合成失敗，跳過此段', e),
+    });
+    setupMediaSession();
+  } else {
+    // 內建版（免費、離線；iOS 鎖屏會暫停）
+    reader = playSequence(steps, {
+      onstep: (step) => showReaderNow(step),
+      ondone: () => stopReadAloud(),
+    });
+  }
+  updateReaderPauseBtn(false); // 需在 reader 指派後才判斷得出能否暫停
 }
+/** 暫停／繼續朗讀（只有鎖屏版的控制器支援 pause/resume），並同步鎖屏播放狀態 */
+function toggleReadPause() {
+  if (!reader || typeof reader.isPaused !== 'function') return;
+  const paused = !reader.isPaused(); // 切換後的目標狀態
+  if (paused) reader.pause(); else reader.resume();
+  updateReaderPauseBtn(paused);
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = paused ? 'paused' : 'playing';
+}
+/** 依暫停狀態更新播放列按鈕文字；內建版不支援暫停時隱藏該鈕 */
+function updateReaderPauseBtn(paused) {
+  const btn = document.getElementById('reader-pause');
+  if (!btn) return;
+  const canPause = reader && typeof reader.isPaused === 'function';
+  btn.hidden = !canPause;
+  btn.textContent = paused ? '繼續' : '暫停';
+}
+/** 停止連續朗讀：停控制器、收起播放列、清掉鎖屏媒體控制 */
 function stopReadAloud() {
   if (reader) { reader.stop(); reader = null; }
   document.getElementById('reader-bar').hidden = true;
+  clearMediaSession();
+}
+
+// ── 鎖屏媒體控制（MediaSession）：鎖屏畫面顯示卡片＋播放/暫停/上下段/停止 ──
+/** 掛上鎖屏控制鈕的動作處理 */
+function setupMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession;
+  try {
+    ms.setActionHandler('play', () => { if (reader) { reader.resume(); updateReaderPauseBtn(false); ms.playbackState = 'playing'; } });
+    ms.setActionHandler('pause', () => { if (reader) { reader.pause(); updateReaderPauseBtn(true); ms.playbackState = 'paused'; } });
+    ms.setActionHandler('nexttrack', () => { if (reader) reader.next(); });
+    ms.setActionHandler('previoustrack', () => { if (reader) reader.prev(); });
+    ms.setActionHandler('stop', () => stopReadAloud());
+    ms.playbackState = 'playing';
+  } catch (e) { console.warn('[mediaSession] 掛載失敗', e); }
+}
+/** 更新鎖屏畫面上顯示的曲目資訊（目前卡片） */
+function setMediaMetadata(step) {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: step.jp || '連續朗讀',
+      artist: step.meaning || '',
+      album: 'JP 日語卡',
+      artwork: [{ src: './icons/icon.svg', sizes: '512x512', type: 'image/svg+xml' }],
+    });
+  } catch (e) { /* 部分瀏覽器不支援 svg artwork，略過 */ }
+}
+/** 收尾：清掉鎖屏控制與曲目資訊 */
+function clearMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession;
+  try {
+    ms.playbackState = 'none';
+    ms.metadata = null;
+    for (const a of ['play', 'pause', 'nexttrack', 'previoustrack', 'stop']) ms.setActionHandler(a, null);
+  } catch (e) { /* 忽略 */ }
 }
 
 // ── 列表 ──────────────────────────────────────
@@ -553,6 +641,7 @@ function bindEvents() {
     b.addEventListener('click', () => setSegType(b.dataset.val));
   });
   document.getElementById('btn-read').addEventListener('click', startReadAloud);
+  document.getElementById('reader-pause').addEventListener('click', toggleReadPause);
   document.getElementById('reader-stop').addEventListener('click', stopReadAloud);
   document.getElementById('tag-toggle').addEventListener('click', () => {
     tagFilterOpen = !tagFilterOpen;
@@ -965,6 +1054,7 @@ function openTtsSubpage() {
   cv.innerHTML = cloudVoices().map((v) => `<option value="${escapeAttr(v.id)}">${escapeHtml(v.label)}</option>`).join('');
   cv.value = settings.ttsVoiceCloud || 'ja-JP-Neural2-B';
   document.getElementById('tts-key').value = settings.ttsKey || '';
+  document.getElementById('tts-lockscreen').checked = settings.lockScreenRead === true; // 預設關（opt-in）
   document.getElementById('tts-test-result').textContent = '';
   toggleTtsBoxes();
   showSettingsView('tts');
@@ -976,6 +1066,7 @@ function saveTtsForm() {
   const webVoice = document.getElementById('tts-voice-web').value;
   if (webVoice) settings.ttsVoiceWeb = webVoice; // 空值(語音清單尚未就緒)時保留舊偏好，不清掉
   settings.ttsVoiceCloud = document.getElementById('tts-voice-cloud').value;
+  settings.lockScreenRead = document.getElementById('tts-lockscreen').checked;
   saveSettings(settings);
   showSettingsView('home');
 }

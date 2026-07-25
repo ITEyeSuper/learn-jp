@@ -26,6 +26,7 @@
   <!-- 連續朗讀播放列（固定底部）-->
   <div id="reader-bar" class="reader-bar" hidden>
     <span id="reader-now" class="reader-now">🎧 朗讀中…</span>
+    <button id="reader-pause" type="button" hidden>暫停</button>
     <button id="reader-stop" type="button">停止</button>
   </div>
 
@@ -358,6 +359,10 @@
           </label>
           <label class="fld">雲端語音
             <select id="tts-voice-cloud"></select>
+          </label>
+          <label class="fld-check">
+            <span>🔒 鎖屏也能播放連續朗讀（用雲端語音，鎖屏／背景不中斷；會用到雲端額度）</span>
+            <input id="tts-lockscreen" type="checkbox" class="switch" />
           </label>
           <p class="set-hint">需在 Google Cloud 開通計費並啟用 Text-to-Speech API（每月有免費額度，實際計費請自行確認）。呼叫失敗會自動退回內建語音。key 只存這台裝置。</p>
         </div>
