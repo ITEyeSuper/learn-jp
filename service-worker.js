@@ -12,9 +12,12 @@ self.addEventListener('install', (e) => {
   // 只預快取新版檔案，先不 skipWaiting；等使用者按「立即更新」再換版（見下方 message）。
   e.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(ASSETS)));
 });
-// 收到頁面的「換版」指令才啟用新版（配合「有新版本 → 立即更新」按鈕）
+// 收到頁面的「換版」指令才啟用新版（配合「有新版本 → 立即更新」按鈕）；
+// 「查版本」則把目前這個 SW 的 CACHE_VERSION 回報給頁面（設定頁顯示用，單一真相來源）。
 self.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (!e.data) return;
+  if (e.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data.type === 'GET_VERSION' && e.ports && e.ports[0]) e.ports[0].postMessage(CACHE_VERSION);
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

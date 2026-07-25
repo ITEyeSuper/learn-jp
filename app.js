@@ -90,6 +90,7 @@ function init() {
   renderTagFilters();
   renderList();
   registerServiceWorker();
+  loadAppVersion();
   maybeOnboard();
 }
 
@@ -1421,6 +1422,34 @@ function showUpdateBanner() {
   const bar = document.getElementById('update-bar');
   if (bar) bar.hidden = false;
 }
+/**
+ * 讀取並顯示目前執行的版本（設定頁底部）。
+ * 優先問「正在控制頁面的 Service Worker」的 CACHE_VERSION（單一真相來源，最能反映手機實際跑的版本）；
+ * 拿不到時退回讀 Cache Storage 的快取名稱；都沒有（如本機 http 未裝 SW）則顯示「開發模式」。
+ */
+function loadAppVersion() {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  const show = (v) => { el.textContent = '版本 ' + v; };
+  // 保底：從 Cache Storage 找 jp-v* 快取名稱當版本
+  const fromCaches = () => {
+    if (!('caches' in window)) { el.textContent = '版本 開發模式（未裝離線快取）'; return; }
+    caches.keys().then((ks) => {
+      const v = ks.find((k) => /^jp-v/.test(k));
+      el.textContent = v ? '版本 ' + v : '版本 開發模式（未裝離線快取）';
+    }).catch(() => { el.textContent = '版本 （未知）'; });
+  };
+  try {
+    const ctrl = ('serviceWorker' in navigator) && navigator.serviceWorker.controller;
+    if (!ctrl) { fromCaches(); return; }
+    const ch = new MessageChannel();
+    let answered = false;
+    ch.port1.onmessage = (e) => { if (e.data) { answered = true; show(e.data); } };
+    ctrl.postMessage({ type: 'GET_VERSION' }, [ch.port2]);
+    setTimeout(() => { if (!answered) fromCaches(); }, 800); // SW 沒回應時保底
+  } catch (e) { console.warn('[version]', e); el.textContent = '版本 （未知）'; }
+}
+
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   // 只有「使用者主動按過更新」才重載，且只重載一次。

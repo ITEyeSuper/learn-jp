@@ -118,8 +118,8 @@ main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
 ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 
 /* 頂部圖示鈕：透明底（白圖示配綠底才清楚）、圖示放大 */
-.icon-btn { background: transparent; color: #fff; border: 0; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; margin-right: 2px; display: inline-flex; align-items: center; justify-content: center; }
-.icon-btn svg { width: 25px; height: 25px; }
+.icon-btn { background: transparent; color: #fff; border: 0; width: 42px; height: 42px; border-radius: 10px; cursor: pointer; margin-right: 3px; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn svg { width: 27px; height: 27px; }
 .icon-btn:active { background: rgba(255,255,255,.22); }
 .head-spacer { width: 40px; }
 .head-right { display: inline-flex; align-items: center; gap: 10px; }
@@ -175,6 +175,7 @@ ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 .set-note { font-size: .8rem; color: var(--muted); background: var(--surface-2); padding: 10px; border-radius: 8px; }
 .set-test-result { font-size: .85rem; color: var(--ink-soft); min-height: 1.2em; word-break: break-all; }
 .set-hint { font-size: .78rem; color: var(--muted); }
+.app-version { margin-top: 22px; text-align: center; font-size: .74rem; color: var(--muted); letter-spacing: .5px; }
 
 /* 首次引導 */
 .ob-title { margin: 4px 0; font-size: 1.3rem; }
@@ -309,8 +310,8 @@ body.hide-romaji .eye-off { display: inline; }
   .app-bar h1 { font-size: 1.1rem; }
   .stats { display: none; }                 /* 手機隱藏張數，把空間讓給按鈕 */
   .app-bar-actions { display: flex; align-items: center; }
-  .icon-btn { width: 34px; height: 34px; margin-right: 1px; }
-  .icon-btn svg { width: 23px; height: 23px; }
+  .icon-btn { width: 40px; height: 40px; margin-right: 2px; }
+  .icon-btn svg { width: 26px; height: 26px; }
   .add-btn { padding: 8px 11px; font-size: .8rem; white-space: nowrap; }
   main { padding: 12px 12px 40px; }
   .study-card .sc-jp { font-size: 2.2rem; }
