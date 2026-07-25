@@ -23,6 +23,12 @@
     </div>
   </header>
 
+  <!-- 連續朗讀播放列（固定底部）-->
+  <div id="reader-bar" class="reader-bar" hidden>
+    <span id="reader-now" class="reader-now">🎧 朗讀中…</span>
+    <button id="reader-stop" type="button">停止</button>
+  </div>
+
   <!-- 有新版本提示（Service Worker 偵測到更新時顯示） -->
   <div id="update-bar" class="update-bar" hidden>
     <span>🔄 有新版本可用</span>
@@ -38,7 +44,10 @@
           <button class="chip-btn" data-type="vocab">單字</button>
           <button class="chip-btn" data-type="grammar">文法</button>
         </div>
-        <button id="tag-toggle" class="tag-toggle" type="button" hidden>🏷 標籤篩選<span id="tag-toggle-badge" class="tag-toggle-badge"></span></button>
+        <div class="filter-row">
+          <button id="tag-toggle" class="tag-toggle" type="button" hidden>🏷 標籤篩選<span id="tag-toggle-badge" class="tag-toggle-badge"></span></button>
+          <button id="btn-read" class="read-btn" type="button">🎧 連續朗讀</button>
+        </div>
         <div class="filter-row" id="tag-filters" hidden></div>
       </div>
       <ul id="card-list" class="card-list"></ul>

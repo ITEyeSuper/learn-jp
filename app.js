@@ -3,7 +3,7 @@ import { toRomaji } from './romaji.js';
 import { analyze } from './jlp.js';
 import { isDue, applyResult, todayISO, buildQuizItems, isLeech, everWrongCards } from './srs.js';
 import { askAI, askVision, hasAI } from './ai.js';
-import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud } from './tts.js';
+import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud, playSequence } from './tts.js';
 import {
   loadCards, upsertCard, deleteCard, allTags,
   loadTagList, saveTagList, addTagToList, removeTagFromList,
@@ -21,6 +21,7 @@ let settings = {};                // AI 等設定
 let currentPage = 1;              // 列表目前頁碼（分頁用）
 const DEFAULT_PAGE_SIZE = 20;     // 每頁預設張數
 let tagFilterOpen = false;        // 首頁標籤篩選是否展開（收合式）
+let suppressClickUntil = 0;       // 左右滑翻頁後短暫抑制卡片點擊，避免滑動誤觸開卡
 
 // 測驗狀態
 let quizPool = [];
@@ -96,6 +97,42 @@ function init() {
 /** 念出日文（引擎與語音依 settings，見 tts.js） */
 function speak(text) { ttsSpeak(text, settings); }
 
+// ── 連續朗讀（搭車聽力：單字 ja+zh、例句 ja+zh，每張念兩次，最新在前）──
+let reader = null;
+/** 依目前清單（最新在前）組朗讀步驟 */
+function buildReadQueue() {
+  const list = sortByNewest(filtered(), true);
+  const steps = [];
+  for (const c of list) {
+    const jp = c.jp;
+    const meaning = c.meaning || '';
+    const once = [];
+    if (c.reading || c.jp) once.push({ text: c.reading || c.jp, lang: 'ja-JP', jp, meaning });
+    if (meaning) once.push({ text: meaning, lang: 'zh-TW', jp, meaning });
+    for (const ex of (c.examples || [])) {
+      const say = hasFuri(ex.jp) ? readingFromFuri(ex.jp) : (ex.reading || ex.jp);
+      if (say) once.push({ text: say, lang: 'ja-JP', jp, meaning });
+      if (ex.zh) once.push({ text: ex.zh, lang: 'zh-TW', jp, meaning });
+    }
+    steps.push(...once, ...once); // 每張念兩次
+  }
+  return steps;
+}
+function startReadAloud() {
+  if (reader) stopReadAloud();            // 先停掉正在進行的，避免兩條語音疊播
+  const steps = buildReadQueue();
+  if (steps.length === 0) { alert('目前清單沒有可朗讀的卡片。'); return; }
+  document.getElementById('reader-bar').hidden = false;
+  reader = playSequence(steps, {
+    onstep: (s) => { document.getElementById('reader-now').textContent = `🎧 ${s.jp}　${s.meaning}`; },
+    ondone: () => stopReadAloud(),
+  });
+}
+function stopReadAloud() {
+  if (reader) { reader.stop(); reader = null; }
+  document.getElementById('reader-bar').hidden = true;
+}
+
 // ── 列表 ──────────────────────────────────────
 function filtered() {
   return cards.filter((c) => {
@@ -160,12 +197,22 @@ function renderList() {
     </li>`;
   }).join('');
   list.querySelectorAll('.card-row').forEach((row) => {
-    row.addEventListener('click', () => openDetail(row.dataset.id));
+    row.addEventListener('click', () => { if (Date.now() < suppressClickUntil) return; openDetail(row.dataset.id); });
   });
   list.querySelectorAll('.speak').forEach((b) => {
-    b.addEventListener('click', (e) => { e.stopPropagation(); speak(b.dataset.say); });
+    b.addEventListener('click', (e) => { e.stopPropagation(); if (Date.now() < suppressClickUntil) return; speak(b.dataset.say); });
   });
   renderPager(page, totalPages);
+}
+
+/** 換頁（delta ±1），夾在合法範圍；捲回頂端 */
+function changePage(delta) {
+  const total = Math.max(1, Math.ceil(filtered().length / pageSize())); // 只需長度，不必排序
+  const next = currentPage + delta;
+  if (next < 1 || next > total) return;
+  currentPage = next;
+  renderList();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /** 渲染分頁列（只有多於一頁時顯示） */
@@ -505,6 +552,8 @@ function bindEvents() {
   document.querySelectorAll('#fld-type .seg-btn').forEach((b) => {
     b.addEventListener('click', () => setSegType(b.dataset.val));
   });
+  document.getElementById('btn-read').addEventListener('click', startReadAloud);
+  document.getElementById('reader-stop').addEventListener('click', stopReadAloud);
   document.getElementById('tag-toggle').addEventListener('click', () => {
     tagFilterOpen = !tagFilterOpen;
     settings.tagFilterOpen = tagFilterOpen;
@@ -607,6 +656,21 @@ function bindEvents() {
   document.getElementById('chat-close').addEventListener('click', closeChat);
   document.getElementById('chat-send').addEventListener('click', sendChat);
   document.getElementById('chat-overlay').addEventListener('click', (e) => { if (e.target.id === 'chat-overlay') closeChat(); });
+
+  // 左右滑翻頁（左滑→下一頁、右滑→上一頁；滑動後抑制點擊避免誤開卡）
+  const lv = document.getElementById('list-view');
+  let sx = 0;
+  let sy = 0;
+  lv.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+  lv.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      suppressClickUntil = Date.now() + 400;
+      changePage(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
 
   // 羅馬拼音眼睛（委派：學習卡/測驗裡的都通用）
   document.addEventListener('click', (e) => { if (e.target.closest('.eye-toggle')) toggleRomaji(); });
@@ -1082,7 +1146,7 @@ async function doPhoto(file) {
   if (aiBusy) return;
   aiBusy = true;
   try {
-    const image = await fileToImage(file);              // 縮圖轉 base64（記憶體內，用完即丟）
+    const image = await fileToImage(file, 768);         // 縮到 768px 省 token（記憶體內，用完即丟）
     openAssistProposal(null, 'AI 辨識中…（照片不會被儲存）');
     const out = await askVision(settings, PHOTO_SYS, image, { json: true });
     if (document.getElementById('assist-overlay').hidden) return; // 使用者已取消 → 丟棄結果
@@ -1091,8 +1155,12 @@ async function doPhoto(file) {
     openAssistProposal(obj, '辨識結果，勾選要帶入的欄位（帶入後可再按 ✨ 補注音）：');
   } catch (e) {
     closeAssist();
-    alert('拍照辨識失敗：' + e.message);
     console.error('[doPhoto]', e);
+    if (/429|quota|rate/i.test(e.message)) {
+      alert('拍照辨識暫時超過免費額度了（圖片很吃額度）。\n可以：\n・等 1 分鐘再試（每分鐘限制）或明天再用（每日限制）\n・設定→綁定 AI，模型改用 gemini-flash-lite-latest（較省）\n・常用的話到 Google 開啟計費（額度大幅提高）');
+    } else {
+      alert('拍照辨識失敗：' + e.message);
+    }
   } finally { aiBusy = false; }
 }
 function renderAssistPreview(obj, cur) {

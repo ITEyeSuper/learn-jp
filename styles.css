@@ -29,14 +29,14 @@ button { font-family: inherit; }
 
 /* App bar */
 .app-bar {
-  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; padding-top: max(7px, env(safe-area-inset-top));
   background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
 .app-bar h1 { margin: 0; font-size: 1.3rem; font-weight: 800; letter-spacing: 1px; }
 .stats { font-size: .8rem; opacity: .9; }
 .app-bar-actions { margin-left: auto; }
-.add-btn { background: #fff; color: var(--accent); border: 0; padding: 8px 14px; border-radius: 100px; font-weight: 700; font-size: .9rem; cursor: pointer; }
+.add-btn { background: #fff; color: var(--accent); border: 0; padding: 6px 14px; border-radius: 100px; font-weight: 700; font-size: .9rem; cursor: pointer; }
 .add-btn:active { filter: brightness(.95); }
 
 main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
@@ -118,7 +118,7 @@ main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
 ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 
 /* 頂部圖示鈕：透明底（白圖示配綠底才清楚）、圖示放大 */
-.icon-btn { background: transparent; color: #fff; border: 0; width: 40px; height: 40px; border-radius: 10px; cursor: pointer; margin-right: 2px; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn { background: transparent; color: #fff; border: 0; width: 36px; height: 36px; border-radius: 10px; cursor: pointer; margin-right: 2px; display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn svg { width: 25px; height: 25px; }
 .icon-btn:active { background: rgba(255,255,255,.22); }
 .head-spacer { width: 40px; }
@@ -272,6 +272,12 @@ body.hide-romaji .eye-off { display: inline; }
 .tag-toggle.open::after { content: ' ▴'; }
 .tag-toggle-badge { color: var(--accent); font-weight: 700; }
 
+/* 連續朗讀 */
+.read-btn { align-self: flex-start; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); padding: 5px 12px; border-radius: 100px; font-size: .82rem; font-weight: 700; cursor: pointer; }
+.reader-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--ink); color: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,.25); }
+.reader-now { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-bar button { background: var(--red); color: #fff; border: 0; padding: 8px 18px; border-radius: 100px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+
 /* AI 健檢正中央視窗 */
 .overlay.center { align-items: center; padding: 16px; z-index: 55; }
 .health-sheet { max-width: 460px; max-height: 82vh; border-radius: 16px; }
@@ -300,8 +306,8 @@ body.hide-romaji .eye-off { display: inline; }
   .app-bar h1 { font-size: 1.1rem; }
   .stats { display: none; }                 /* 手機隱藏張數，把空間讓給按鈕 */
   .app-bar-actions { display: flex; align-items: center; }
-  .icon-btn { width: 38px; height: 38px; margin-right: 1px; }
-  .icon-btn svg { width: 24px; height: 24px; }
+  .icon-btn { width: 34px; height: 34px; margin-right: 1px; }
+  .icon-btn svg { width: 23px; height: 23px; }
   .add-btn { padding: 8px 11px; font-size: .8rem; white-space: nowrap; }
   main { padding: 12px 12px 40px; }
   .study-card .sc-jp { font-size: 2.2rem; }

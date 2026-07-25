@@ -116,3 +116,40 @@ export function speak(text, s) {
 export async function testCloud(s) {
   await speakCloud('こんにちは。テストです。', s);
 }
+
+/**
+ * 連續朗讀一串步驟（用內建語音，方便鏈接與免費；日/中依 step.lang 選音）。
+ * 注意：iOS 在螢幕鎖定/切背景時會暫停 Web 語音，屬平台限制。
+ * @param {Array<{text:string, lang:string}>} steps
+ * @param {{onstep?:Function, ondone?:Function}} [cb]
+ * @returns {{stop:Function}} 控制器
+ */
+export function playSequence(steps, cb = {}) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) { if (cb.ondone) cb.ondone(); return { stop() {} }; }
+  let stopped = false;
+  let i = 0;
+  window.speechSynthesis.cancel();
+  const pick = (lang) => {
+    const p = (lang || 'ja').slice(0, 2).toLowerCase();
+    return webVoices.find((v) => v.lang && v.lang.toLowerCase().startsWith(p)) || null;
+  };
+  const next = () => {
+    if (stopped) return;
+    if (i >= steps.length) { if (cb.ondone) cb.ondone(); return; }
+    const step = steps[i];
+    i += 1;
+    if (cb.onstep) cb.onstep(step, i - 1);
+    try {
+      const u = new SpeechSynthesisUtterance(step.text);
+      u.lang = step.lang || 'ja-JP';
+      const v = pick(step.lang);
+      if (v) u.voice = v;
+      u.rate = 0.9;
+      u.onend = () => { if (!stopped) next(); };
+      u.onerror = () => { if (!stopped) next(); };
+      window.speechSynthesis.speak(u);
+    } catch (e) { if (!stopped) next(); }
+  };
+  next();
+  return { stop() { stopped = true; try { window.speechSynthesis.cancel(); } catch (e) { /* 忽略 */ } } };
+}
