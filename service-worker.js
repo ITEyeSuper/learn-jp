@@ -1,5 +1,5 @@
 // service-worker.js — 離線快取（cache-first）。改檔後把 CACHE_VERSION +1。
-const CACHE_VERSION = 'jp-v14';
+const CACHE_VERSION = 'jp-v19';
 const ASSETS = [
   './', './index.html', './styles.css',
   './app.js', './romaji.js', './srs.js', './store.js', './jlp.js', './ai.js', './tts.js',

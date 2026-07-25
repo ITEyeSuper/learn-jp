@@ -86,6 +86,19 @@ export function paginate(items, page, size) {
   return { page: p, totalPages, items: items.slice(start, start + per) };
 }
 
+/**
+ * 找出與 card 重複的既有卡（同 type、同 jp，排除自己）。無則回 null。
+ * @param {Array} cards 目前卡片
+ * @param {object} card 要存的卡
+ * @param {string|null} selfId 正在編輯的卡 id（排除自己）
+ * @returns {object|null}
+ */
+export function findDuplicate(cards, card, selfId) {
+  const j = (card.jp || '').trim();
+  if (!j) return null;
+  return cards.find((c) => c.id !== selfId && c.type === card.type && (c.jp || '').trim() === j) || null;
+}
+
 /** 取得所有用過的標籤（去重、排序） */
 export function allTags(cards) {
   const set = new Set();

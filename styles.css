@@ -90,7 +90,7 @@ main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
 .auto-btn:disabled { opacity: .6; }
 .danger-btn { background: var(--red-soft); color: var(--red); border: 0; padding: 12px; border-radius: 10px; font-weight: 700; cursor: pointer; margin-top: 8px; }
 .example-item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-.example-item input { font-size: .95rem; }
+.example-item input { font-size: 1rem; } /* 16px：低於 16px 時 iOS 聚焦會自動放大畫面 */
 .example-item .ex-romaji { font-size: .75rem; color: var(--accent); }
 .example-item .ex-rm { align-self: flex-end; background: none; border: 0; color: var(--red); font-size: .8rem; cursor: pointer; }
 
@@ -116,12 +116,16 @@ ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 .icon-btn svg { width: 25px; height: 25px; }
 .icon-btn:active { background: rgba(255,255,255,.22); }
 .head-spacer { width: 40px; }
+.head-right { display: inline-flex; align-items: center; gap: 10px; }
+.head-icon { background: transparent; border: 0; color: var(--accent); cursor: pointer; padding: 4px; display: inline-flex; align-items: center; border-radius: 8px; }
+.head-icon:active { background: var(--surface-2); }
 
 /* 表單標籤選擇 */
 .tag-select { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag-chip { background: var(--surface); border: 1px solid var(--line); color: var(--ink-soft); padding: 6px 12px; border-radius: 100px; font-size: .85rem; font-weight: 600; cursor: pointer; }
 .tag-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tag-chip.add { border-style: dashed; color: var(--accent); }
+.tags-empty { color: var(--muted); font-size: .85rem; }
 
 /* 標籤管理 */
 .add-tag-row { display: flex; gap: 8px; }
@@ -142,6 +146,7 @@ ruby rt { font-size: .55em; color: var(--muted); font-weight: 400; }
 .q-mode { color: var(--accent); font-size: .8rem; font-weight: 700; text-align: center; }
 .q-prompt { text-align: center; margin: 18px 0 22px; }
 .q-jp { font-size: 2.4rem; font-weight: 800; }
+.q-ex-jp { font-size: 1.6rem; font-weight: 700; line-height: 1.7; }
 .q-reading { color: var(--accent); font-size: 1rem; margin-top: 4px; }
 .q-zh { font-size: 1.6rem; font-weight: 700; }
 .speak.big { padding: 10px; }

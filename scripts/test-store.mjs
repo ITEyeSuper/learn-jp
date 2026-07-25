@@ -7,7 +7,7 @@ globalThis.localStorage = {
   removeItem: (k) => { delete mem[k]; },
 };
 
-const { exportAll, importAll, loadCards, saveCards, loadTagList, saveTagList, sortByNewest, paginate } = await import('../store.js');
+const { exportAll, importAll, loadCards, saveCards, loadTagList, saveTagList, sortByNewest, paginate, findDuplicate } = await import('../store.js');
 
 let pass = 0;
 let fail = 0;
@@ -79,6 +79,18 @@ eq('第3頁剩 5 張', paginate(list, 3, 10).items.length, 5);
 eq('超界頁碼夾回最後一頁', paginate(list, 99, 10).page, 3);
 eq('頁碼<1 夾回第1頁', paginate(list, 0, 10).page, 1);
 eq('空清單 totalPages=1', paginate([], 1, 10).totalPages, 1);
+
+console.log('\n■ findDuplicate 重複偵測');
+const dcards = [
+  { id: 'a', type: 'vocab', jp: '頭', meaning: '頭' },
+  { id: 'b', type: 'grammar', jp: '〜ので', meaning: '因為' },
+];
+eq('同類型同日文 → 找到', findDuplicate(dcards, { type: 'vocab', jp: '頭' }, null)?.id, 'a');
+eq('前後空白也算同 → 找到', findDuplicate(dcards, { type: 'vocab', jp: ' 頭 ' }, null)?.id, 'a');
+eq('同日文但不同類型 → 不算', findDuplicate(dcards, { type: 'grammar', jp: '頭' }, null), null);
+eq('編輯自己 → 不算重複', findDuplicate(dcards, { type: 'vocab', jp: '頭' }, 'a'), null);
+eq('不同日文 → null', findDuplicate(dcards, { type: 'vocab', jp: '水' }, null), null);
+eq('空日文 → null', findDuplicate(dcards, { type: 'vocab', jp: '' }, null), null);
 
 console.log(`\n總結：${pass} 通過，${fail} 失敗`);
 process.exit(fail ? 1 : 0);

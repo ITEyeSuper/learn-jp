@@ -51,7 +51,11 @@
       <div class="sheet-head">
         <button id="edit-cancel" class="text-btn">取消</button>
         <span id="edit-title" class="sheet-title">新增卡片</span>
-        <button id="edit-save" class="text-btn primary">儲存</button>
+        <span class="head-right">
+          <button id="btn-photo" class="head-icon" type="button" title="拍照辨識（照片不儲存）" aria-label="拍照辨識"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+          <button id="edit-save" class="text-btn primary">儲存</button>
+        </span>
+        <input id="photo-file" type="file" accept="image/*" capture="environment" hidden />
       </div>
       <div class="sheet-body">
         <label class="fld">類型
@@ -69,6 +73,10 @@
             <option value="副詞">副詞</option>
             <option value="其他">其他</option>
           </select>
+        </label>
+        <label class="fld">標籤
+          <div id="fld-tags-selected" class="tag-select"></div>
+          <button type="button" id="btn-pick-tags" class="mini-btn">🏷 選擇／管理標籤</button>
         </label>
         <label class="fld">日文（單字／句型）
           <input id="fld-jp" type="text" placeholder="例：頭 / 〜てもいい" />
@@ -89,11 +97,26 @@
         <button type="button" id="btn-auto-furi" class="auto-btn">✨ 自動注音／羅馬拼音（kuromoji）</button>
         <button type="button" id="btn-ai-assist" class="auto-btn ai">🤖 AI 協助補完（可指定只補哪裡）</button>
 
-        <div class="fld">標籤（點選，可複選）
-          <div id="fld-tags-chips" class="tag-select"></div>
-        </div>
-
         <button id="edit-delete" class="danger-btn" hidden>刪除這張卡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 選擇／管理標籤（編輯卡片用）-->
+  <div id="tagpick-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <span class="head-spacer"></span>
+        <span class="sheet-title">選擇標籤</span>
+        <button id="tagpick-done" class="text-btn primary">完成</button>
+      </div>
+      <div class="sheet-body">
+        <div class="add-tag-row">
+          <input id="tagpick-new-input" type="text" placeholder="新標籤名稱（例：N5、動物）" />
+          <button id="tagpick-new-add" class="mini-btn">＋ 新增</button>
+        </div>
+        <p class="set-hint">點標籤＝選取／取消（綠色＝已選）。這張卡的標籤隨時可在這裡增減。</p>
+        <div id="tagpick-chips" class="tag-select"></div>
       </div>
     </div>
   </div>
@@ -144,7 +167,13 @@
             <button type="button" class="seg-btn" data-val="grammar">文法</button>
           </div>
         </div>
-        <div class="fld">模式（可複選）
+        <div class="fld">測驗內容（可複選）
+          <div class="tag-select" id="qs-content">
+            <button type="button" class="tag-chip on" data-content="word">單字</button>
+            <button type="button" class="tag-chip on" data-content="example">例句</button>
+          </div>
+        </div>
+        <div class="fld">模式（可複選；例句只做讀／聽）
           <div class="tag-select" id="qs-modes">
             <button type="button" class="tag-chip on" data-mode="read">讀（看→選意思）</button>
             <button type="button" class="tag-chip on" data-mode="listen">聽（聽發音→選意思）</button>

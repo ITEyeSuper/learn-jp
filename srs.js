@@ -35,6 +35,29 @@ export function qualityFromCorrect(correct) { return correct ? 5 : 1; }
 export function applyResult(srs, correct, today) {
   return applyQuality(srs || startLearning(today), qualityFromCorrect(correct), today);
 }
+/**
+ * 組測驗題目清單（純函式）。單字題與例句題都掛在同一張卡的 SM-2 上。
+ * @param {Array} cards 卡片
+ * @param {object} opts {type:'all'|'vocab'|'grammar', tags:Set<string>, content:Set<'word'|'example'>, dueOnly:boolean, today:string}
+ * @returns {Array<{kind:'word'|'example', card:object, ex?:object}>}
+ */
+export function buildQuizItems(cards, opts = {}) {
+  const { type = 'all', tags = new Set(), content = new Set(['word']), dueOnly = true, today } = opts;
+  const items = [];
+  for (const c of cards) {
+    if (type !== 'all' && c.type !== type) continue;
+    if (tags.size && !(c.tags || []).some((t) => tags.has(t))) continue;
+    if (dueOnly && !isDue(c.srs, today)) continue;
+    if (content.has('word')) items.push({ kind: 'word', card: c });
+    if (content.has('example')) {
+      for (const ex of (c.examples || [])) {
+        if (ex && ex.zh && (ex.jp || ex.reading)) items.push({ kind: 'example', card: c, ex });
+      }
+    }
+  }
+  return items;
+}
+
 /** SM-2 核心 */
 export function applyQuality(p, q, today) {
   let ease = p.easeFactor ?? DEFAULT_EASE;

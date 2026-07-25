@@ -20,6 +20,23 @@ export async function askAI(s, messages, opts = {}) {
   throw new Error('未知的 AI 供應商：' + p);
 }
 
+/**
+ * 送一張圖片＋提示給 AI（多模態視覺），回傳純文字。
+ * @param {object} s 設定 {aiProvider, aiKey, aiModel, aiEndpoint}
+ * @param {string} prompt 指示文字
+ * @param {{mime:string, data:string}} image mime 類型與 base64（不含 data: 前綴）
+ * @param {object} [opts] {json:boolean}
+ * @returns {Promise<string>}
+ */
+export async function askVision(s, prompt, image, opts = {}) {
+  if (!s || !s.aiKey) throw new Error('尚未設定 AI key（請到設定頁）');
+  const p = s.aiProvider || 'gemini';
+  if (p === 'gemini') return visionGemini(s, prompt, image, opts);
+  if (p === 'openai') return visionOpenAI(s, prompt, image, opts);
+  if (p === 'anthropic') return visionAnthropic(s, prompt, image, opts);
+  throw new Error('未知的 AI 供應商：' + p);
+}
+
 async function callGemini(s, messages, opts) {
   const model = s.aiModel || 'gemini-flash-latest';
   const base = (s.aiEndpoint || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
@@ -55,6 +72,44 @@ async function callAnthropic(s, messages, opts) {
   const msgs = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
   const body = { model, max_tokens: 1024, messages: msgs };
   if (sys) body.system = sys;
+  const r = await fetch(`${base}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': s.aiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`Anthropic ${r.status}：${(await r.text()).slice(0, 300)}`);
+  const d = await r.json();
+  return (d.content || []).map((x) => x.text || '').join('');
+}
+
+// ── 視覺（多模態）──────────────────────────────
+async function visionGemini(s, prompt, image, opts) {
+  const model = s.aiModel || 'gemini-flash-latest';
+  const base = (s.aiEndpoint || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '');
+  const url = `${base}/models/${model}:generateContent?key=${encodeURIComponent(s.aiKey)}`;
+  const body = { contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: image.mime, data: image.data } }] }] };
+  if (opts.json) body.generationConfig = { responseMimeType: 'application/json' };
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`Gemini ${r.status}：${(await r.text()).slice(0, 300)}`);
+  const d = await r.json();
+  return (d.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('');
+}
+async function visionOpenAI(s, prompt, image, opts) {
+  const model = s.aiModel || 'gpt-4o-mini';
+  const base = (s.aiEndpoint || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const content = [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:${image.mime};base64,${image.data}` } }];
+  const body = { model, messages: [{ role: 'user', content }] };
+  if (opts.json) body.response_format = { type: 'json_object' };
+  const r = await fetch(`${base}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.aiKey}` }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`OpenAI ${r.status}：${(await r.text()).slice(0, 300)}`);
+  const d = await r.json();
+  return d.choices?.[0]?.message?.content || '';
+}
+async function visionAnthropic(s, prompt, image, opts) {
+  const model = s.aiModel || 'claude-3-5-sonnet-latest'; // 需支援視覺的模型
+  const base = (s.aiEndpoint || 'https://api.anthropic.com/v1').replace(/\/$/, '');
+  const content = [{ type: 'text', text: prompt }, { type: 'image', source: { type: 'base64', media_type: image.mime, data: image.data } }];
+  const body = { model, max_tokens: 1024, messages: [{ role: 'user', content }] };
   const r = await fetch(`${base}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': s.aiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
