@@ -55,7 +55,13 @@ main { max-width: 680px; margin: 0 auto; padding: 12px 14px 40px; }
 .card-row .cr-jp { font-size: 1.25rem; font-weight: 700; min-width: 84px; }
 .card-row .cr-reading { font-size: .72rem; color: var(--accent); display: block; font-weight: 400; }
 .card-row .cr-meaning { flex: 1; color: var(--ink-soft); font-size: .95rem; }
-.card-row .cr-badge { font-size: .68rem; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.card-row .cr-badge { font-size: .68rem; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; flex-shrink: 0; }
+.card-row .cr-meaning { min-width: 0; }
+.card-row .cr-status { font-size: .64rem; font-weight: 700; border-radius: 5px; padding: 2px 6px; flex-shrink: 0; white-space: nowrap; }
+.cr-status.st-new { color: var(--accent); border: 1px solid var(--accent); }
+.cr-status.st-due { background: var(--accent); color: #fff; }
+.cr-status.st-later { color: var(--muted); border: 1px solid var(--line); }
+.cr-status.st-leech { background: var(--wrong); color: #fff; }
 /* 喇叭：裸圖示、無圈圈，靠近文字 */
 .speak { background: transparent; border: 0; padding: 5px; border-radius: 8px; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); }
 .speak:active { background: var(--surface-2); }
@@ -255,6 +261,21 @@ body.hide-romaji .eye-off { display: inline; }
 .pg-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--accent); font-size: 1.4rem; line-height: 1; cursor: pointer; }
 .pg-btn:disabled { color: var(--muted); opacity: .4; cursor: default; }
 .pg-info { color: var(--ink-soft); font-size: .95rem; font-variant-numeric: tabular-nums; min-width: 56px; text-align: center; }
+
+/* 測驗鈕「今日到期」數字 */
+.icon-btn { position: relative; }
+.qbadge { position: absolute; top: 0; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 100px; background: var(--red); color: #fff; font-size: .58rem; font-weight: 800; display: flex; align-items: center; justify-content: center; line-height: 1; }
+
+/* 首頁標籤篩選收合鈕 */
+.tag-toggle { align-self: flex-start; background: var(--surface); border: 1px dashed var(--line); color: var(--ink-soft); padding: 5px 12px; border-radius: 100px; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.tag-toggle::after { content: ' ▾'; color: var(--muted); }
+.tag-toggle.open::after { content: ' ▴'; }
+.tag-toggle-badge { color: var(--accent); font-weight: 700; }
+
+/* AI 健檢正中央視窗 */
+.overlay.center { align-items: center; padding: 16px; z-index: 55; }
+.health-sheet { max-width: 460px; max-height: 82vh; border-radius: 16px; }
+.health-body { white-space: pre-wrap; line-height: 1.75; color: var(--ink); font-size: .95rem; }
 
 /* 有新版本提示橫幅（固定在底部） */
 .update-bar {

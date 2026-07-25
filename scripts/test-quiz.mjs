@@ -1,6 +1,6 @@
 // test-quiz.mjs — 驗證 srs.js 的 buildQuizItems（單字/例句題庫組建）
 // 執行：cd C:\edhong\JP && node scripts/test-quiz.mjs
-import { buildQuizItems, addDays, todayISO } from '../srs.js';
+import { buildQuizItems, addDays, todayISO, isLeech, everWrongCards } from '../srs.js';
 
 let pass = 0;
 let fail = 0;
@@ -45,6 +45,27 @@ console.log('\n■ dueOnly=false 收未到期的 b');
 eq('全部單字題（含未到期 b）',
   buildQuizItems(cards, { content: new Set(['word']), dueOnly: false, today }).map((i) => i.card.id),
   ['a', 'b', 'c']);
+
+console.log('\n■ 常錯題（leech）');
+eq('答錯2次未連對 → 是常錯題', isLeech({ stats: { wrong: 2, streak: 0 } }), true);
+eq('答錯2次但連對2次 → 畢業(非常錯)', isLeech({ stats: { wrong: 2, streak: 2 } }), false);
+eq('答錯1次 → 還不是常錯', isLeech({ stats: { wrong: 1, streak: 0 } }), false);
+eq('無 stats → 非常錯', isLeech({}), false);
+// 常錯題即使「未到期」也納入，且單字題多出一次
+const leechCard = { id: 'L', type: 'vocab', tags: [], meaning: '難字', srs: { nextReview: addDays(today, 9) }, stats: { wrong: 3, streak: 0 }, examples: [] };
+const litems = buildQuizItems([leechCard], { content: new Set(['word']), dueOnly: true, today });
+eq('未到期的常錯題仍被納入且出現2次', litems.length, 2);
+eq('都標記 leech', litems.every((i) => i.leech), true);
+
+console.log('\n■ everWrongCards（沒有常錯題時的加強複習排序）');
+const wc = [
+  { id: 'a', stats: { wrong: 3, streak: 2 }, srs: { lastReviewed: '2026-07-10' } },
+  { id: 'b', stats: { wrong: 1, streak: 5 }, srs: { lastReviewed: '2026-07-25' } },
+  { id: 'c', stats: { wrong: 3, streak: 2 }, srs: { lastReviewed: '2026-07-20' } },
+  { id: 'd', stats: { wrong: 0, streak: 9 }, srs: { lastReviewed: '2026-07-25' } },
+];
+eq('錯多優先、同分最近恢復優先；沒錯過的排除', everWrongCards(wc).map((c) => c.id).join(''), 'cab');
+eq('全沒錯過 → 空', everWrongCards([{ id: 'x', stats: { wrong: 0 } }]).length, 0);
 
 console.log(`\n總結：${pass} 通過，${fail} 失敗`);
 process.exit(fail ? 1 : 0);

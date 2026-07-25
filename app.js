@@ -1,7 +1,7 @@
 // app.js — JP 主動學習 App 主程式（Phase 1：輸入與複習核心）
 import { toRomaji } from './romaji.js';
 import { analyze } from './jlp.js';
-import { isDue, applyResult, todayISO, buildQuizItems } from './srs.js';
+import { isDue, applyResult, todayISO, buildQuizItems, isLeech, everWrongCards } from './srs.js';
 import { askAI, askVision, hasAI } from './ai.js';
 import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud } from './tts.js';
 import {
@@ -20,6 +20,7 @@ let editingId = null;             // 目前編輯中的卡片 id（null = 新增
 let settings = {};                // AI 等設定
 let currentPage = 1;              // 列表目前頁碼（分頁用）
 const DEFAULT_PAGE_SIZE = 20;     // 每頁預設張數
+let tagFilterOpen = false;        // 首頁標籤篩選是否展開（收合式）
 
 // 測驗狀態
 let quizPool = [];
@@ -27,7 +28,7 @@ let quizIdx = 0;
 let quizCorrect = 0;
 let quizAnswered = false;
 let quizMode = 'read';            // 本題模式 read|listen|write
-const gradedThisSession = new Set(); // 本場已套過 SM-2 的卡 id（每卡每場只套一次）
+const sessionAnswers = new Map();    // 本場每張卡作答結果：cardId → {card, wrong}（任一題錯即 wrong）
 let aiBusy = false;               // AI 請求進行中（防連點/並發）
 const quizModes = new Set(['read', 'listen', 'write']); // 已選模式
 const qsTags = new Set();         // 測驗標籤篩選
@@ -73,6 +74,7 @@ function toggleRomaji() {
 function init() {
   cards = loadCards();
   settings = loadSettings();
+  tagFilterOpen = !!settings.tagFilterOpen;
   tagList = loadTagList();
   // 遷移：把卡片上已有、但主清單沒有的標籤補進主清單
   const before = tagList.length;
@@ -105,7 +107,35 @@ function filtered() {
 
 function pageSize() { return Number(settings.pageSize) || DEFAULT_PAGE_SIZE; }
 
+/** 兩個 YYYY-MM-DD 相差天數（b - a） */
+function daysBetween(a, b) {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+/** 卡片的複習狀態徽章 {label, cls} */
+function cardStatus(c) {
+  const today = todayISO();
+  if (isLeech(c)) return { label: '常錯', cls: 'st-leech' };
+  if (!c.srs || !c.srs.nextReview) return { label: '新', cls: 'st-new' };
+  if (isDue(c.srs, today)) return { label: '今天', cls: 'st-due' };
+  return { label: daysBetween(today, c.srs.nextReview) + '天', cls: 'st-later' };
+}
+/** 更新測驗鈕上的「今日到期」數字（到期或常錯題） */
+function updateQuizBadge() {
+  const today = todayISO();
+  const n = cards.filter((c) => isDue(c.srs, today) || isLeech(c)).length;
+  const btn = document.getElementById('btn-quiz');
+  let b = btn.querySelector('.qbadge');
+  if (n > 0) {
+    if (!b) { b = document.createElement('span'); b.className = 'qbadge'; btn.appendChild(b); }
+    b.textContent = n > 99 ? '99+' : String(n);
+    b.hidden = false;
+  } else if (b) { b.hidden = true; }
+}
+
 function renderList() {
+  updateQuizBadge();
   const list = document.getElementById('card-list');
   const all = sortByNewest(filtered(), settings.newestFirst !== false); // 預設最新在前
   document.getElementById('stats').textContent = `${cards.length} 張卡`;
@@ -118,13 +148,17 @@ function renderList() {
   }
   const { page, totalPages, items } = paginate(all, currentPage, pageSize());
   currentPage = page; // 夾回合法範圍（例如刪到剩較少頁）
-  list.innerHTML = items.map((c) => `
+  list.innerHTML = items.map((c) => {
+    const st = cardStatus(c);
+    return `
     <li class="card-row" data-id="${escapeAttr(c.id)}">
       <button class="speak" data-say="${escapeAttr(c.reading || c.jp)}" aria-label="播放發音">${svgIcon('speaker', 20)}</button>
       <span class="cr-jp">${escapeHtml(c.jp)}<span class="cr-reading">${escapeHtml(c.reading || '')}</span></span>
       <span class="cr-meaning">${escapeHtml(c.meaning || '')}</span>
+      <span class="cr-status ${st.cls}">${st.label}</span>
       <span class="cr-badge">${c.type === 'grammar' ? '文法' : escapeHtml(c.pos || '單字')}</span>
-    </li>`).join('');
+    </li>`;
+  }).join('');
   list.querySelectorAll('.card-row').forEach((row) => {
     row.addEventListener('click', () => openDetail(row.dataset.id));
   });
@@ -164,6 +198,15 @@ function renderTagFilters() {
       renderList();
     });
   });
+  box.hidden = !tagFilterOpen;
+  updateTagToggle();
+}
+/** 更新「標籤篩選」收合鈕（沒有標籤就隱藏；顯示已選數量與展開箭頭） */
+function updateTagToggle() {
+  const btn = document.getElementById('tag-toggle');
+  btn.hidden = tagList.length === 0;
+  btn.classList.toggle('open', tagFilterOpen);
+  document.getElementById('tag-toggle-badge').textContent = activeTags.size ? ` (${activeTags.size})` : '';
 }
 
 // ── 新增／編輯表單 ────────────────────────────
@@ -385,7 +428,8 @@ function openDetail(id) {
       <div class="sc-meaning">${escapeHtml(c.meaning || '')}</div>
     </div>
     ${exHtml ? '<hr class="sc-divider" />' + exHtml : ''}
-    <button class="card-ask-btn" id="card-ask">${svgIcon('chat', 18)}<span>問 AI 這張卡</span></button>`;
+    <button class="card-ask-btn" id="card-ask">${svgIcon('chat', 18)}<span>問 AI 這張卡</span></button>
+    <button class="card-ask-btn" id="card-health">🩺 <span>AI 健檢（語體／用法解說）</span></button>`;
   document.getElementById('study-card').querySelectorAll('.speak').forEach((b) => {
     b.addEventListener('click', () => speak(b.dataset.say));
   });
@@ -396,6 +440,7 @@ function openDetail(id) {
     scTts.textContent = settings.ttsEngine === 'gcloud' ? '語音·雲端' : '語音·內建';
   });
   document.getElementById('card-ask').addEventListener('click', () => { closeDetail(); openChat(c.id); });
+  document.getElementById('card-health').addEventListener('click', () => openHealthCheck(c.id));
   document.getElementById('detail-overlay').hidden = false;
 }
 function closeDetail() { document.getElementById('detail-overlay').hidden = true; }
@@ -460,6 +505,12 @@ function bindEvents() {
   document.querySelectorAll('#fld-type .seg-btn').forEach((b) => {
     b.addEventListener('click', () => setSegType(b.dataset.val));
   });
+  document.getElementById('tag-toggle').addEventListener('click', () => {
+    tagFilterOpen = !tagFilterOpen;
+    settings.tagFilterOpen = tagFilterOpen;
+    saveSettings(settings);
+    renderTagFilters();
+  });
   document.querySelectorAll('#type-filters .chip-btn').forEach((b) => {
     b.addEventListener('click', () => {
       activeType = b.dataset.type;
@@ -481,6 +532,8 @@ function bindEvents() {
   document.getElementById('btn-quiz').addEventListener('click', openQuizSetup);
   document.getElementById('qs-cancel').addEventListener('click', () => { document.getElementById('quiz-setup-overlay').hidden = true; });
   document.getElementById('qs-start').addEventListener('click', startQuiz);
+  document.getElementById('qs-leech').addEventListener('click', startLeechQuiz);
+  document.getElementById('qs-count').addEventListener('change', (e) => { settings.quizCount = Number(e.target.value) || 0; saveSettings(settings); });
   document.querySelectorAll('#qs-type .seg-btn').forEach((b) => b.addEventListener('click', () => {
     qsType = b.dataset.val;
     document.querySelectorAll('#qs-type .seg-btn').forEach((x) => x.classList.toggle('active', x === b));
@@ -514,6 +567,7 @@ function bindEvents() {
   document.getElementById('tts-engine').addEventListener('change', toggleTtsBoxes);
   document.getElementById('tts-test').addEventListener('click', testTts);
   document.getElementById('set-newest').addEventListener('change', onToggleNewest);
+  document.getElementById('set-review-wrong').addEventListener('change', (e) => { settings.reviewWrongWhenNoLeech = e.target.checked; saveSettings(settings); });
   document.getElementById('set-pagesize').addEventListener('change', applyPageSize);
   document.getElementById('pagesize-chips').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-n]');
@@ -544,6 +598,10 @@ function bindEvents() {
   document.getElementById('assist-apply').addEventListener('click', applyAssist);
   document.getElementById('assist-overlay').addEventListener('click', (e) => { if (e.target.id === 'assist-overlay') closeAssist(); });
 
+  // AI 健檢
+  document.getElementById('health-close').addEventListener('click', closeHealth);
+  document.getElementById('health-overlay').addEventListener('click', (e) => { if (e.target.id === 'health-overlay') closeHealth(); });
+
   // AI 問答
   document.getElementById('btn-ai').addEventListener('click', () => openChat(null));
   document.getElementById('chat-close').addEventListener('click', closeChat);
@@ -555,7 +613,13 @@ function bindEvents() {
 }
 
 // ── 測驗（SM-2 + 單字/例句 × 聽/讀/寫）──────────
-function openQuizSetup() { renderQsTags(); renderQsContent(); updateQsInfo(); document.getElementById('quiz-setup-overlay').hidden = false; }
+function openQuizSetup() {
+  renderQsTags();
+  renderQsContent();
+  document.getElementById('qs-count').value = String(settings.quizCount || 0);
+  updateQsInfo();
+  document.getElementById('quiz-setup-overlay').hidden = false;
+}
 function renderQsContent() {
   document.querySelectorAll('#qs-content .tag-chip').forEach((b) => b.classList.toggle('on', qsContent.has(b.dataset.content)));
 }
@@ -580,6 +644,8 @@ function updateQsInfo() {
   const cand = quizItems(false).length;
   const due = quizItems(true).length;
   document.getElementById('qs-info').textContent = `符合 ${cand} 題，其中 ${due} 題到期可測。`;
+  const leechN = cards.filter((c) => isLeech(c)).length;
+  document.getElementById('qs-leech').textContent = leechN ? `🔴 只測常錯題（${leechN}）` : '🔴 只測常錯題（目前沒有）';
 }
 function startQuiz() {
   if (quizModes.size === 0) { alert('至少選一種模式（聽／讀／寫）'); return; }
@@ -591,7 +657,48 @@ function startQuiz() {
     if (!confirm('目前沒有到期的題目，要複習全部符合範圍的嗎？')) return;
     pool = all;
   }
-  quizPool = shuffle(pool); quizIdx = 0; quizCorrect = 0; gradedThisSession.clear();
+  launchQuiz(pool);
+}
+/** 從一組卡片（依給定順序）組題目 */
+function itemsFromCards(list, content) {
+  const out = [];
+  for (const c of list) {
+    out.push(...buildQuizItems([c], { type: 'all', tags: new Set(), content, dueOnly: false, today: todayISO() })
+      .filter((it) => modesForKind(it.kind).length > 0));
+  }
+  return out;
+}
+/** 只測常錯題（忽略範圍/到期）；沒有常錯題時，若設定開啟則改複習「曾錯過」的字（錯多/最近恢復優先） */
+function startLeechQuiz() {
+  if (quizModes.size === 0) { alert('至少選一種模式（聽／讀／寫）'); return; }
+  const content = qsContent.size ? qsContent : new Set(['word']);
+  const pool = buildQuizItems(cards, { type: 'all', tags: new Set(), content, dueOnly: false, today: todayISO() })
+    .filter((it) => it.leech && modesForKind(it.kind).length > 0);
+  if (pool.length > 0) { launchQuiz(pool); return; }
+  // 沒有常錯題
+  if (cards.some(isLeech)) { alert('有常錯題，但目前的「模式／內容」組合出不了題（例句題只有讀／聽）。請調整設定再試。'); return; }
+  if (settings.reviewWrongWhenNoLeech === false) { alert('目前沒有常錯題 🎉（答錯累積 2 次才會進常錯題庫）'); return; }
+  // fallback：曾經錯過的字，錯多/最近恢復優先
+  const weakPool = itemsFromCards(everWrongCards(cards), content);
+  if (weakPool.length === 0) { alert('目前沒有常錯題，也沒有曾經錯過的字可複習 🎉'); return; }
+  launchQuiz(weakPool, { rankOrder: true });
+}
+/**
+ * 開始一場測驗：套題數上限 → 進入。
+ * @param {Array} pool 題目
+ * @param {object} [opts] {rankOrder:boolean} pool 已依優先度排序 → 先取前 N（高優先）再打散呈現
+ */
+function launchQuiz(pool, opts = {}) {
+  const n = Number(settings.quizCount) || 0;          // 0＝全部
+  if (opts.rankOrder) {
+    let arr = pool;
+    if (n > 0 && n < arr.length) arr = arr.slice(0, n); // 取高優先的前 N
+    quizPool = shuffle(arr);                            // 呈現順序再打散
+  } else {
+    quizPool = shuffle(pool);
+    if (n > 0 && n < quizPool.length) quizPool = quizPool.slice(0, n);
+  }
+  quizIdx = 0; quizCorrect = 0; sessionAnswers.clear();
   document.getElementById('quiz-setup-overlay').hidden = true;
   document.getElementById('quiz-overlay').hidden = false;
   renderQuizQuestion();
@@ -705,22 +812,34 @@ function submitWrite() {
   showContinue();
 }
 function norm(s) { return (s || '').trim().replace(/\s/g, ''); }
+// 記錄本場作答（不立即套 SM-2）：同一張卡任一題答錯 → 整場算錯
 function gradeCard(c, correct) {
   if (correct) quizCorrect += 1;                 // 分數照每題算
-  if (gradedThisSession.has(c.id)) return;       // 但一場每張卡只套一次 SM-2，避免間隔複利膨脹
-  gradedThisSession.add(c.id);
-  c.srs = applyResult(c.srs, correct, todayISO());
-  upsertCard(cards, c);
+  const cur = sessionAnswers.get(c.id) || { card: c, wrong: false };
+  if (!correct) cur.wrong = true;
+  sessionAnswers.set(c.id, cur);
+}
+// 測驗結束／離開時結算：依「本場是否曾答錯」一次套 SM-2 與常錯統計（錯一次就 streak 歸零、不畢業）
+function commitSession() {
+  const today = todayISO();
+  for (const { card, wrong } of sessionAnswers.values()) {
+    card.stats = card.stats || { wrong: 0, streak: 0 };
+    if (wrong) { card.stats.wrong += 1; card.stats.streak = 0; } else { card.stats.streak += 1; }
+    card.srs = applyResult(card.srs, !wrong, today);
+    upsertCard(cards, card);
+  }
+  sessionAnswers.clear();
 }
 function showContinue() { const b = document.getElementById('quiz-continue'); b.hidden = false; b.focus(); }
 function continueQuiz() { quizIdx += 1; if (quizIdx >= quizPool.length) finishQuiz(); else renderQuizQuestion(); }
 function finishQuiz() {
+  commitSession();
   document.getElementById('quiz-overlay').hidden = true;
   document.getElementById('quiz-score').textContent = `答對 ${quizCorrect} / ${quizPool.length}`;
   document.getElementById('quiz-done-overlay').hidden = false;
   renderList();
 }
-function exitQuiz() { document.getElementById('quiz-overlay').hidden = true; renderList(); }
+function exitQuiz() { commitSession(); document.getElementById('quiz-overlay').hidden = true; renderList(); }
 
 // ── 設定（分組清單首頁 + AI／語音 子頁）─────────
 let settingsView = 'home';
@@ -746,6 +865,7 @@ function saveSubpage() {
 function openSettings() {
   // 首頁「顯示」設定
   document.getElementById('set-newest').checked = settings.newestFirst !== false;
+  document.getElementById('set-review-wrong').checked = settings.reviewWrongWhenNoLeech !== false;
   document.getElementById('set-pagesize').value = String(pageSize());
   markPageSizeChip();
   showSettingsView('home');
@@ -920,7 +1040,7 @@ async function runAssist() {
   const status = document.getElementById('assist-status');
   status.textContent = 'AI 思考中…';
   const cardForAI = currentCardForAI();
-  const sys = '你是日語學習卡助手。使用者會給你一張卡片「目前的內容」(JSON) 和一個「指示」。請「只」依指示修改或補充，回傳一個 JSON 物件，「只」包含你要新增或修改的欄位，其餘欄位一律不要出現。可用欄位：jp(日文單字或句型)、meaning(繁體中文意思)、pos(名詞/動詞/形容詞/副詞/其他)、examples(陣列，每項 {jp:日文例句, zh:繁體中文翻譯})。不要產生讀音或注音（那由 App 用 kuromoji 處理）。只輸出 JSON，不要多餘文字。';
+  const sys = '你是日語學習卡助手。使用者會給你一張卡片「目前的內容」(JSON) 和一個「指示」。請「只」依指示修改或補充，回傳一個 JSON 物件，「只」包含你要新增或修改的欄位，其餘欄位一律不要出現。可用欄位：jp(日文單字或句型)、meaning(繁體中文意思)、pos(名詞/動詞/形容詞/副詞/其他)、examples(陣列，每項 {jp:日文例句, zh:繁體中文翻譯})。例句一律用禮貌體（丁寧体，です・ます），語氣以男性／中性為主。不要產生讀音或注音（那由 App 用 kuromoji 處理）。只輸出 JSON，不要多餘文字。';
   try {
     const out = await askAI(settings, [{ role: 'system', text: sys }, { role: 'user', text: '目前卡片：' + JSON.stringify(cardForAI) + '\n指示：' + instruction }], { json: true });
     if (document.getElementById('assist-overlay').hidden) return; // 已被關掉 → 丟棄結果
@@ -933,7 +1053,7 @@ async function runAssist() {
   finally { aiBusy = false; }
 }
 // 拍照辨識：把照片縮小、送 AI 辨識單字＋例句，走同一套勾選預覽。照片不儲存。
-const PHOTO_SYS = '你是日語學習助手。看這張圖片，辨識其中最主要的一個日文單字或詞，以及一個包含它的自然例句。回傳 JSON，欄位：jp(日文單字或句型)、meaning(繁體中文意思)、pos(名詞/動詞/形容詞/副詞/其他)、examples(陣列，每項 {jp:日文例句, zh:繁體中文翻譯})。不要產生讀音或注音（那由 App 用 kuromoji 處理）。只輸出 JSON，不要多餘文字。';
+const PHOTO_SYS = '你是日語學習助手。看這張圖片，辨識其中最主要的一個日文單字或詞，以及一個包含它的自然例句。回傳 JSON，欄位：jp(日文單字或句型)、meaning(繁體中文意思)、pos(名詞/動詞/形容詞/副詞/其他)、examples(陣列，每項 {jp:日文例句, zh:繁體中文翻譯})。例句一律用禮貌體（丁寧体，です・ます），語氣以男性／中性為主。不要產生讀音或注音（那由 App 用 kuromoji 處理）。只輸出 JSON，不要多餘文字。';
 /** 讀檔→縮圖→base64（縮小以省流量/token；不寫入任何儲存） */
 function fileToImage(file, maxDim = 1024) {
   return new Promise((resolve, reject) => {
@@ -1001,6 +1121,30 @@ function applyAssist() {
   }
   closeAssist(); // 直接套用並關閉，不再跳通知
 }
+
+// ── AI 健檢（解說語體／用法，正中央視窗）──────
+let healthSeq = 0; // 請求世代序號：慢回應若已關閉或換了別張卡就丟棄，避免蓋錯面板
+async function openHealthCheck(cardId) {
+  if (!hasAI(settings)) { if (confirm('尚未設定 AI，前往設定？')) openSettings(); return; }
+  const c = cards.find((x) => x.id === cardId);
+  if (!c) return;
+  const my = ++healthSeq;
+  const stale = () => my !== healthSeq || document.getElementById('health-overlay').hidden;
+  document.getElementById('health-context').textContent = `這張卡：${c.jp}（${c.meaning || ''}）`;
+  document.getElementById('health-body').textContent = 'AI 健檢中…';
+  document.getElementById('health-overlay').hidden = false;
+  const sys = '你是日語老師。針對使用者給的一張日語學習卡，用繁體中文「分點、簡潔」說明：①禮貌度（丁寧体です・ます／常体だ，這張屬哪種、怎麼互轉）②男女語氣差異或適用對象 ③常見變體或其他說法 ④相關文法與使用場合／注意事項。只講重點、條列，不要空泛。';
+  const payload = { jp: c.jp, reading: c.reading, meaning: c.meaning, examples: (c.examples || []).map((e) => ({ jp: readingFromFuri(e.jp), zh: e.zh })) };
+  try {
+    const r = await askAI(settings, [{ role: 'system', text: sys }, { role: 'user', text: '卡片：' + JSON.stringify(payload) }]);
+    if (stale()) return; // 已關閉或已換別張卡 → 丟棄，不蓋錯面板
+    document.getElementById('health-body').textContent = r;
+  } catch (e) {
+    if (stale()) return;
+    document.getElementById('health-body').textContent = '❌ ' + e.message;
+  }
+}
+function closeHealth() { document.getElementById('health-overlay').hidden = true; }
 
 // ── AI 問答（卡內／全域）──────────────────────
 function openChat(cardId) {

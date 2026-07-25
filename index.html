@@ -38,7 +38,8 @@
           <button class="chip-btn" data-type="vocab">單字</button>
           <button class="chip-btn" data-type="grammar">文法</button>
         </div>
-        <div class="filter-row" id="tag-filters"></div>
+        <button id="tag-toggle" class="tag-toggle" type="button" hidden>🏷 標籤篩選<span id="tag-toggle-badge" class="tag-toggle-badge"></span></button>
+        <div class="filter-row" id="tag-filters" hidden></div>
       </div>
       <ul id="card-list" class="card-list"></ul>
       <div id="pager" class="pager" hidden></div>
@@ -180,10 +181,20 @@
             <button type="button" class="tag-chip on" data-mode="write">寫（看中文→寫日文）</button>
           </div>
         </div>
+        <div class="fld">題數（一次測幾題）
+          <select id="qs-count">
+            <option value="0">全部</option>
+            <option value="10">10 題</option>
+            <option value="20">20 題</option>
+            <option value="30">30 題</option>
+            <option value="50">50 題</option>
+          </select>
+        </div>
         <div class="fld">標籤篩選（可複選，空＝不限）
           <div class="tag-select" id="qs-tags"></div>
         </div>
         <p id="qs-info" class="qs-info"></p>
+        <button type="button" id="qs-leech" class="auto-btn ai">🔴 只測常錯題</button>
       </div>
     </div>
   </div>
@@ -246,6 +257,10 @@
           <label class="set-item">
             <span>最新卡片放最上面</span>
             <input type="checkbox" id="set-newest" class="switch" />
+          </label>
+          <label class="set-item">
+            <span>沒有常錯題時，改複習曾錯過的字</span>
+            <input type="checkbox" id="set-review-wrong" class="switch" />
           </label>
           <div class="set-item set-col">
             <span>每頁顯示張數（可直接輸入或點選）</span>
@@ -378,6 +393,21 @@
           <textarea id="chat-input" rows="2" placeholder="輸入你的問題…"></textarea>
           <button id="chat-send" class="add-btn">送出</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 健檢（正中央視窗，解說語體/用法）-->
+  <div id="health-overlay" class="overlay center" hidden>
+    <div class="sheet health-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <span class="head-spacer"></span>
+        <span class="sheet-title">🩺 AI 健檢</span>
+        <button id="health-close" class="text-btn primary">關閉</button>
+      </div>
+      <div class="sheet-body">
+        <div id="health-context" class="chat-context"></div>
+        <div id="health-body" class="health-body"></div>
       </div>
     </div>
   </div>

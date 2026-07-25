@@ -35,11 +35,37 @@ export function qualityFromCorrect(correct) { return correct ? 5 : 1; }
 export function applyResult(srs, correct, today) {
   return applyQuality(srs || startLearning(today), qualityFromCorrect(correct), today);
 }
+// 常錯題（leech）門檻：累積答錯達 LEECH_WRONG → 進常錯題庫；之後連對達 LEECH_GRADUATE → 畢業
+export const LEECH_WRONG = 2;
+export const LEECH_GRADUATE = 2;
+/** 是否為常錯題（答錯夠多、且還沒連對夠多次畢業） */
+export function isLeech(card) {
+  const w = (card && card.stats && card.stats.wrong) || 0;
+  const s = (card && card.stats && card.stats.streak) || 0;
+  return w >= LEECH_WRONG && s < LEECH_GRADUATE;
+}
+
+/**
+ * 「曾經錯過」的卡，依優先度排序（純函式）：錯越多越前面；同分則最近複習(恢復)的在前。
+ * 用於「沒有常錯題時」的加強複習。
+ * @param {Array} cards
+ * @returns {Array} 依優先度排序（高→低）的卡片
+ */
+export function everWrongCards(cards) {
+  return cards
+    .filter((c) => (((c.stats && c.stats.wrong) || 0) > 0))
+    .sort((a, b) => (
+      (((b.stats && b.stats.wrong) || 0) - ((a.stats && a.stats.wrong) || 0))
+      || String((b.srs && b.srs.lastReviewed) || '').localeCompare(String((a.srs && a.srs.lastReviewed) || ''))
+    ));
+}
+
 /**
  * 組測驗題目清單（純函式）。單字題與例句題都掛在同一張卡的 SM-2 上。
+ * 常錯題：即使未到期也納入，且單字題多出一次（出現率加倍），連對畢業後恢復正常。
  * @param {Array} cards 卡片
  * @param {object} opts {type:'all'|'vocab'|'grammar', tags:Set<string>, content:Set<'word'|'example'>, dueOnly:boolean, today:string}
- * @returns {Array<{kind:'word'|'example', card:object, ex?:object}>}
+ * @returns {Array<{kind:'word'|'example', card:object, ex?:object, leech:boolean}>}
  */
 export function buildQuizItems(cards, opts = {}) {
   const { type = 'all', tags = new Set(), content = new Set(['word']), dueOnly = true, today } = opts;
@@ -47,11 +73,15 @@ export function buildQuizItems(cards, opts = {}) {
   for (const c of cards) {
     if (type !== 'all' && c.type !== type) continue;
     if (tags.size && !(c.tags || []).some((t) => tags.has(t))) continue;
-    if (dueOnly && !isDue(c.srs, today)) continue;
-    if (content.has('word')) items.push({ kind: 'word', card: c });
+    const leech = isLeech(c);
+    if (dueOnly && !isDue(c.srs, today) && !leech) continue; // 到期 或 常錯題 才納入
+    if (content.has('word')) {
+      items.push({ kind: 'word', card: c, leech });
+      if (leech) items.push({ kind: 'word', card: c, leech }); // 常錯題多出一次
+    }
     if (content.has('example')) {
       for (const ex of (c.examples || [])) {
-        if (ex && ex.zh && (ex.jp || ex.reading)) items.push({ kind: 'example', card: c, ex });
+        if (ex && ex.zh && (ex.jp || ex.reading)) items.push({ kind: 'example', card: c, ex, leech });
       }
     }
   }
