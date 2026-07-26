@@ -3,6 +3,7 @@ import { toRomaji } from './romaji.js';
 import { analyze } from './jlp.js';
 import { isDue, applyResult, todayISO, buildQuizItems, isLeech, everWrongCards } from './srs.js';
 import { matchReading, matchDictation, isTwoField } from './quizcheck.js';
+import { mdToHtml } from './mdlite.js';
 import { askAI, askVision, hasAI } from './ai.js';
 import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud, playSequence, playAudioSequence } from './tts.js';
 import {
@@ -93,6 +94,7 @@ function init() {
   });
   bindEvents();
   if (settings.hideRomaji) document.body.classList.add('hide-romaji');
+  applyReviewMask();
   document.getElementById('quiz-eye').innerHTML = EYE_BTN;
   renderTagFilters();
   renderList();
@@ -229,6 +231,26 @@ function clearMediaSession() {
   } catch (e) { /* 忽略 */ }
 }
 
+// ── 複習遮蔽（首頁三態；非測驗，邊看邊自我測驗）──
+const REVIEW_STATES = ['none', 'jp', 'zh'];                                   // none=全顯示、jp=遮日文(只中文)、zh=遮中文(只日文)
+const REVIEW_LABELS = { none: '複習：全部', jp: '複習：只中文', zh: '複習：只日文' };
+/** 套用目前遮蔽狀態到 body class 與按鈕文字（並清掉殘留的偷看） */
+function applyReviewMask() {
+  const st = REVIEW_STATES.includes(settings.reviewMask) ? settings.reviewMask : 'none';
+  document.body.classList.toggle('mask-jp', st === 'jp');
+  document.body.classList.toggle('mask-zh', st === 'zh');
+  document.querySelectorAll('.cr-jp.peek, .cr-meaning.peek').forEach((el) => el.classList.remove('peek'));
+  const btn = document.getElementById('btn-review');
+  if (btn) btn.textContent = '👁 ' + REVIEW_LABELS[st];
+}
+/** 循環切換遮蔽（全部→只中文→只日文→全部），存設定並套用 */
+function cycleReviewMask() {
+  const cur = REVIEW_STATES.includes(settings.reviewMask) ? settings.reviewMask : 'none';
+  settings.reviewMask = REVIEW_STATES[(REVIEW_STATES.indexOf(cur) + 1) % REVIEW_STATES.length];
+  saveSettings(settings);
+  applyReviewMask();
+}
+
 // ── 列表 ──────────────────────────────────────
 function filtered() {
   return cards.filter((c) => {
@@ -297,6 +319,17 @@ function renderList() {
   });
   list.querySelectorAll('.speak').forEach((b) => {
     b.addEventListener('click', (e) => { e.stopPropagation(); if (Date.now() < suppressClickUntil) return; speak(b.dataset.say); });
+  });
+  // 複習遮蔽：點被模糊的字 → 暫時現形（偷看），不開詳情；點其他區域照常開詳情
+  list.querySelectorAll('.cr-jp, .cr-meaning').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (Date.now() < suppressClickUntil) return; // 剛左右滑翻頁 → 不誤觸（也讓 row 的相同守門攔下）
+      const masked = (el.classList.contains('cr-jp') && document.body.classList.contains('mask-jp'))
+        || (el.classList.contains('cr-meaning') && document.body.classList.contains('mask-zh'));
+      if (!masked) return;                 // 沒被遮就不攔，讓事件冒泡去開詳情
+      e.stopPropagation();
+      el.classList.toggle('peek');         // 再點一次可收回
+    });
   });
   renderPager(page, totalPages);
 }
@@ -649,6 +682,7 @@ function bindEvents() {
     b.addEventListener('click', () => setSegType(b.dataset.val));
   });
   document.getElementById('btn-read').addEventListener('click', startReadAloud);
+  document.getElementById('btn-review').addEventListener('click', cycleReviewMask);
   document.getElementById('reader-pause').addEventListener('click', toggleReadPause);
   document.getElementById('reader-stop').addEventListener('click', stopReadAloud);
   document.getElementById('tag-toggle').addEventListener('click', () => {
@@ -1376,7 +1410,7 @@ async function openHealthCheck(cardId) {
   try {
     const r = await askAI(settings, [{ role: 'system', text: sys }, { role: 'user', text: '卡片：' + JSON.stringify(payload) }]);
     if (stale()) return; // 已關閉或已換別張卡 → 丟棄，不蓋錯面板
-    document.getElementById('health-body').textContent = r;
+    document.getElementById('health-body').innerHTML = mdToHtml(r); // AI 回的是 Markdown → 渲染成排版（mdToHtml 已逃脫）
   } catch (e) {
     if (stale()) return;
     document.getElementById('health-body').textContent = '❌ ' + e.message;
