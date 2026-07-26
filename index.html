@@ -184,11 +184,14 @@
             <button type="button" class="tag-chip on" data-content="example">例句</button>
           </div>
         </div>
-        <div class="fld">模式（可複選；例句只做讀／聽）
+        <div class="fld">模式（可複選；例句只做 讀／聽；其餘為單字專用）
           <div class="tag-select" id="qs-modes">
-            <button type="button" class="tag-chip on" data-mode="read">讀（看→選意思）</button>
-            <button type="button" class="tag-chip on" data-mode="listen">聽（聽發音→選意思）</button>
-            <button type="button" class="tag-chip on" data-mode="write">寫（看中文→寫日文）</button>
+            <button type="button" class="tag-chip" data-mode="read">讀（看→選意思）</button>
+            <button type="button" class="tag-chip" data-mode="kana">讀漢字假名（看假名→選意思）</button>
+            <button type="button" class="tag-chip" data-mode="reading">漢字讀音（看漢字→打假名）</button>
+            <button type="button" class="tag-chip" data-mode="listen">聽（聽發音→選意思）</button>
+            <button type="button" class="tag-chip" data-mode="dictation">聽寫（聽→打漢字＋假名）</button>
+            <button type="button" class="tag-chip" data-mode="write">寫（看中文→打漢字＋假名）</button>
           </div>
         </div>
         <div class="fld">題數（一次測幾題）

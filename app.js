@@ -2,6 +2,7 @@
 import { toRomaji } from './romaji.js';
 import { analyze } from './jlp.js';
 import { isDue, applyResult, todayISO, buildQuizItems, isLeech, everWrongCards } from './srs.js';
+import { matchReading, matchDictation, isTwoField } from './quizcheck.js';
 import { askAI, askVision, hasAI } from './ai.js';
 import { speak as ttsSpeak, initWebVoices, listJaVoices, cloudVoices, ttsEngine, testCloud, playSequence, playAudioSequence } from './tts.js';
 import {
@@ -28,10 +29,11 @@ let quizPool = [];
 let quizIdx = 0;
 let quizCorrect = 0;
 let quizAnswered = false;
-let quizMode = 'read';            // 本題模式 read|listen|write
+let quizMode = 'read';            // 本題模式 read|kana|reading|listen|dictation|write
 const sessionAnswers = new Map();    // 本場每張卡作答結果：cardId → {card, wrong}（任一題錯即 wrong）
 let aiBusy = false;               // AI 請求進行中（防連點/並發）
-const quizModes = new Set(['read', 'listen', 'write']); // 已選模式
+const VALID_MODES = ['read', 'kana', 'reading', 'listen', 'dictation', 'write']; // 全部模式 id
+const quizModes = new Set(['read', 'listen', 'write']); // 已選模式（新模式 kana/reading/dictation 預設不選；會持久化）
 const qsTags = new Set();         // 測驗標籤篩選
 const qsContent = new Set(['word', 'example']); // 測驗內容：單字／例句
 let qsType = 'all';
@@ -75,6 +77,11 @@ function toggleRomaji() {
 function init() {
   cards = loadCards();
   settings = loadSettings();
+  // 還原上次的測驗模式選擇（只收合法的 id；沒存過就沿用預設 讀/聽/寫）
+  if (Array.isArray(settings.quizModes)) {
+    quizModes.clear();
+    settings.quizModes.filter((m) => VALID_MODES.includes(m)).forEach((m) => quizModes.add(m));
+  }
   tagFilterOpen = !!settings.tagFilterOpen;
   tagList = loadTagList();
   // 遷移：把卡片上已有、但主清單沒有的標籤補進主清單
@@ -682,6 +689,7 @@ function bindEvents() {
     const m = b.dataset.mode;
     if (quizModes.has(m)) quizModes.delete(m); else quizModes.add(m);
     b.classList.toggle('on', quizModes.has(m));
+    settings.quizModes = [...quizModes]; saveSettings(settings); // 記住選擇
     updateQsInfo();
   }));
   document.querySelectorAll('#qs-content .tag-chip').forEach((b) => b.addEventListener('click', () => {
@@ -770,12 +778,17 @@ function bindEvents() {
 function openQuizSetup() {
   renderQsTags();
   renderQsContent();
+  renderQsModes();
   document.getElementById('qs-count').value = String(settings.quizCount || 0);
   updateQsInfo();
   document.getElementById('quiz-setup-overlay').hidden = false;
 }
 function renderQsContent() {
   document.querySelectorAll('#qs-content .tag-chip').forEach((b) => b.classList.toggle('on', qsContent.has(b.dataset.content)));
+}
+/** 依 quizModes（可能來自持久化）同步模式 chip 的選取狀態 */
+function renderQsModes() {
+  document.querySelectorAll('#qs-modes .tag-chip').forEach((b) => b.classList.toggle('on', quizModes.has(b.dataset.mode)));
 }
 function renderQsTags() {
   const box = document.getElementById('qs-tags');
@@ -784,15 +797,22 @@ function renderQsTags() {
     const t = b.dataset.tag; if (qsTags.has(t)) qsTags.delete(t); else qsTags.add(t); renderQsTags(); updateQsInfo();
   }));
 }
-/** 例句題只有 讀/聽；單字題 讀/聽/寫。回傳此類目前可用的模式 */
-function modesForKind(kind) {
-  const all = kind === 'example' ? ['read', 'listen'] : ['read', 'listen', 'write'];
+/**
+ * 回傳這個題目「目前可用」的模式（已選 ∩ 適用）。
+ * 例句：只有 讀/聽。單字：讀/聽/聽寫/寫都行；「讀漢字假名、漢字讀音」只在「有漢字且有讀音」時才出（純假名詞不出，避免重複或空題）。
+ * @param {{kind:string, card?:object}} item 題目
+ * @returns {string[]} 可用模式 id
+ */
+function availableModes(item) {
+  if (item.kind === 'example') return ['read', 'listen'].filter((m) => quizModes.has(m));
+  const all = ['read', 'listen', 'write', 'dictation'];
+  if (isTwoField(item.card)) all.push('kana', 'reading'); // 有漢字才出：讀漢字假名、漢字讀音
   return all.filter((m) => quizModes.has(m));
 }
 /** 依設定組題庫（過濾掉沒有可用模式的題） */
 function quizItems(dueOnly) {
   return buildQuizItems(cards, { type: qsType, tags: qsTags, content: qsContent, dueOnly, today: todayISO() })
-    .filter((it) => modesForKind(it.kind).length > 0);
+    .filter((it) => availableModes(it).length > 0);
 }
 function updateQsInfo() {
   const cand = quizItems(false).length;
@@ -818,7 +838,7 @@ function itemsFromCards(list, content) {
   const out = [];
   for (const c of list) {
     out.push(...buildQuizItems([c], { type: 'all', tags: new Set(), content, dueOnly: false, today: todayISO() })
-      .filter((it) => modesForKind(it.kind).length > 0));
+      .filter((it) => availableModes(it).length > 0));
   }
   return out;
 }
@@ -827,7 +847,7 @@ function startLeechQuiz() {
   if (quizModes.size === 0) { alert('至少選一種模式（聽／讀／寫）'); return; }
   const content = qsContent.size ? qsContent : new Set(['word']);
   const pool = buildQuizItems(cards, { type: 'all', tags: new Set(), content, dueOnly: false, today: todayISO() })
-    .filter((it) => it.leech && modesForKind(it.kind).length > 0);
+    .filter((it) => it.leech && availableModes(it).length > 0);
   if (pool.length > 0) { launchQuiz(pool); return; }
   // 沒有常錯題
   if (cards.some(isLeech)) { alert('有常錯題，但目前的「模式／內容」組合出不了題（例句題只有讀／聽）。請調整設定再試。'); return; }
@@ -857,7 +877,7 @@ function launchQuiz(pool, opts = {}) {
   document.getElementById('quiz-overlay').hidden = false;
   renderQuizQuestion();
 }
-function pickModeForItem(item) { const a = modesForKind(item.kind); return a[Math.floor(Math.random() * a.length)]; }
+function pickModeForItem(item) { const a = availableModes(item); return a[Math.floor(Math.random() * a.length)]; }
 
 /** 單字意思干擾項 */
 function wordDistractors(card) {
@@ -884,22 +904,52 @@ function renderQuizQuestion() {
   document.getElementById('quiz-continue').hidden = true;
   const body = document.getElementById('quiz-body');
 
-  // 寫（只有單字題）
-  if (item.kind === 'word' && quizMode === 'write') {
+  // 漢字讀音（只有單字題）：看漢字 → 打假名讀音
+  if (item.kind === 'word' && quizMode === 'reading') {
     const c = item.card;
     body.innerHTML = `
-      <div class="q-mode">寫（看中文 → 寫日文）</div>
-      <div class="q-prompt"><span class="q-zh">${escapeHtml(c.meaning || '')}</span></div>
-      <input id="q-write-input" class="q-write" type="text" placeholder="輸入日文（漢字或假名皆可）" autocomplete="off" />
-      <button id="q-write-submit" class="add-btn">作答</button>
+      <div class="q-mode">漢字讀音（看漢字 → 打假名讀音）</div>
+      <div class="q-prompt"><span class="q-jp">${escapeHtml(c.jp)}</span></div>
+      <input id="q-reading-input" class="q-write" type="text" placeholder="打出假名讀音（如 えいがかん）" autocomplete="off" lang="ja" />
+      <button id="q-reading-submit" class="add-btn">作答</button>
       <div id="q-reveal" class="q-reveal"></div>`;
-    body.querySelector('#q-write-submit').addEventListener('click', submitWrite);
-    body.querySelector('#q-write-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitWrite(); });
-    setTimeout(() => body.querySelector('#q-write-input')?.focus(), 60);
+    const go = () => submitReading(item);
+    body.querySelector('#q-reading-submit').addEventListener('click', go);
+    body.querySelector('#q-reading-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    setTimeout(() => body.querySelector('#q-reading-input')?.focus(), 60);
     return;
   }
 
-  // 讀／聽 → 選（單字選意思、例句選翻譯）
+  // 聽寫（聽 → 打）／寫（看中文 → 打）：有漢字給兩格（日文寫法＋假名），純假名詞單格。只有單字題。
+  if (item.kind === 'word' && (quizMode === 'dictation' || quizMode === 'write')) {
+    const c = item.card;
+    const two = isTwoField(c);
+    const isDict = quizMode === 'dictation';
+    const modeLabel = isDict
+      ? (two ? '聽寫（聽 → 打 漢字＋假名）' : '聽寫（聽 → 打出來）')
+      : (two ? '寫（看中文 → 打 漢字＋假名）' : '寫（看中文 → 打日文）');
+    const promptHtml = isDict
+      ? `<button id="q-replay" class="speak big" aria-label="再聽一次">${svgIcon('speaker', 30)}</button>`
+      : `<span class="q-zh">${escapeHtml(c.meaning || '')}</span>`;
+    const fields = two
+      ? `<input id="q-dj" class="q-write" type="text" placeholder="日文寫法（含漢字）" autocomplete="off" lang="ja" />
+         <input id="q-dk" class="q-write" type="text" placeholder="假名讀音（自己打，不要讓 IME 選字）" autocomplete="off" lang="ja" />`
+      : `<input id="q-dj" class="q-write" type="text" placeholder="打出這個字（假名即可）" autocomplete="off" lang="ja" />`;
+    body.innerHTML = `
+      <div class="q-mode">${modeLabel}</div>
+      <div class="q-prompt">${promptHtml}</div>
+      ${fields}
+      <button id="q-d-submit" class="add-btn">作答</button>
+      <div id="q-reveal" class="q-reveal"></div>`;
+    const go = () => submitDictation(item);
+    body.querySelector('#q-d-submit').addEventListener('click', go);
+    body.querySelectorAll('.q-write').forEach((inp) => inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); }));
+    if (isDict) { speak(c.reading || c.jp); body.querySelector('#q-replay').addEventListener('click', () => speak(c.reading || c.jp)); }
+    setTimeout(() => body.querySelector('#q-dj')?.focus(), 60);
+    return;
+  }
+
+  // 讀／讀漢字假名／聽 → 選（單字選意思、例句選翻譯）
   const listen = quizMode === 'listen';
   let correctText;
   let promptHtml;
@@ -917,10 +967,17 @@ function renderQuizQuestion() {
     const c = item.card;
     correctText = c.meaning;
     sayText = c.reading || c.jp;
-    modeLabel = listen ? '聽（聽發音 → 選意思）' : '讀（看 → 選意思）';
-    promptHtml = listen
-      ? `<button id="q-replay" class="speak big" aria-label="再聽一次">${svgIcon('speaker', 30)}</button>`
-      : `<span class="q-jp">${escapeHtml(c.jp)}</span>${c.reading ? `<div class="q-reading">${escapeHtml(c.reading)}</div>` : ''}`;
+    if (quizMode === 'kana') {
+      // 讀漢字假名：只給假名讀音（不顯示漢字、不發音），逼你靠讀音認意思
+      modeLabel = '讀漢字假名（看假名 → 選意思）';
+      promptHtml = `<span class="q-jp">${escapeHtml(c.reading || '')}</span>`;
+    } else if (listen) {
+      modeLabel = '聽（聽發音 → 選意思）';
+      promptHtml = `<button id="q-replay" class="speak big" aria-label="再聽一次">${svgIcon('speaker', 30)}</button>`;
+    } else {
+      modeLabel = '讀（看 → 選意思）';
+      promptHtml = `<span class="q-jp">${escapeHtml(c.jp)}</span>${c.reading ? `<div class="q-reading">${escapeHtml(c.reading)}</div>` : ''}`;
+    }
   }
   const distract = item.kind === 'example' ? exampleDistractors(item.ex) : wordDistractors(item.card);
   const opts = shuffle([correctText, ...distract]).filter(Boolean);
@@ -952,20 +1009,41 @@ function answerChoice(correct, btn, item, correctText) {
   speak(item.kind === 'example' ? exReadingText(item.ex) : (item.card.reading || item.card.jp));
   showContinue();
 }
-function submitWrite() {
+/**
+ * 漢字讀音判分：看漢字、打假名（判分邏輯在 quizcheck.matchReading）
+ * @param {{kind:string, card:object}} item 目前題目
+ */
+function submitReading(item) {
   if (quizAnswered) return;
-  const c = quizPool[quizIdx].card;
-  const val = norm(document.getElementById('q-write-input').value);
-  const ok = !!val && (val === norm(c.jp) || val === norm(c.reading));
+  const c = item.card;
+  const ok = matchReading(document.getElementById('q-reading-input').value, c.reading);
   quizAnswered = true;
   gradeCard(c, ok);
-  document.getElementById('q-write-input').disabled = true;
-  document.getElementById('q-write-submit').disabled = true;
+  document.getElementById('q-reading-input').disabled = true;
+  document.getElementById('q-reading-submit').disabled = true;
   document.getElementById('q-reveal').innerHTML = `<div class="q-ans ${ok ? 'ok' : 'ng'}">${ok ? '✅ 正確' : '❌ 正解：'}${escapeHtml(c.jp)}　${escapeHtml(c.reading || '')}</div>`;
   speak(c.reading || c.jp);
   showContinue();
 }
-function norm(s) { return (s || '').trim().replace(/\s/g, ''); }
+/**
+ * 聽寫／寫判分：兩格（日文寫法＋假名）都要對，純假名詞單格（判分邏輯在 quizcheck.matchDictation）
+ * @param {{kind:string, card:object}} item 目前題目
+ */
+function submitDictation(item) {
+  if (quizAnswered) return;
+  const c = item.card;
+  const dj = document.getElementById('q-dj');
+  const dk = document.getElementById('q-dk');
+  const res = matchDictation(dj ? dj.value : '', dk ? dk.value : '', c);
+  quizAnswered = true;
+  gradeCard(c, res.ok);
+  document.querySelectorAll('.q-write').forEach((i) => { i.disabled = true; });
+  document.getElementById('q-d-submit').disabled = true;
+  const detail = (res.twoField && !res.ok) ? `（${res.jpOk ? '漢字 ✓' : '漢字 ✗'}　${res.kanaOk ? '假名 ✓' : '假名 ✗'}）` : '';
+  document.getElementById('q-reveal').innerHTML = `<div class="q-ans ${res.ok ? 'ok' : 'ng'}">${res.ok ? '✅ 正確' : '❌ 正解：'}${escapeHtml(c.jp)}　${escapeHtml(c.reading || '')} ${detail}</div>`;
+  speak(c.reading || c.jp);
+  showContinue();
+}
 // 記錄本場作答（不立即套 SM-2）：同一張卡任一題答錯 → 整場算錯
 function gradeCard(c, correct) {
   if (correct) quizCorrect += 1;                 // 分數照每題算
@@ -1165,7 +1243,7 @@ function openAssist() {
   document.getElementById('assist-instruction').closest('.fld').hidden = false; // 指示式：顯示指示欄與送出
   document.getElementById('assist-run').hidden = false;
   // 預設指示＝補空白（直接按送出就會補空欄、不動已填的），使用者可自行改寫
-  document.getElementById('assist-instruction').value = '把空白的欄位幫我補齊，已經有內容的不要更動。';
+  document.getElementById('assist-instruction').value = '把空白的欄位幫我補齊；已有內容原則上不要更動，但例句若不是禮貌體（丁寧体）請幫我改成禮貌體。';
   document.getElementById('assist-status').textContent = '';
   document.getElementById('assist-preview').innerHTML = '';
   document.getElementById('assist-apply').hidden = true;
@@ -1196,7 +1274,7 @@ async function runAssist() {
   const status = document.getElementById('assist-status');
   status.textContent = 'AI 思考中…';
   const cardForAI = currentCardForAI();
-  const sys = '你是日語學習卡助手。使用者會給你一張卡片「目前的內容」(JSON) 和一個「指示」。請「只」依指示修改或補充，回傳一個 JSON 物件，「只」包含你要新增或修改的欄位，其餘欄位一律不要出現。可用欄位：jp(日文單字或句型)、meaning(繁體中文意思)、pos(名詞/動詞/形容詞/副詞/其他)、examples(陣列，每項 {jp:日文例句, zh:繁體中文翻譯})。例句一律用禮貌體（丁寧体，です・ます），語氣以男性／中性為主。不要產生讀音或注音（那由 App 用 kuromoji 處理）。只輸出 JSON，不要多餘文字。';
+  const sys = '你是日語學習卡助手。使用者會給你一張卡片「目前的內容」(JSON) 和一個「指示」。請「只」依指示修改或補充，回傳一個 JSON 物件，「只」包含你要新增或修改的欄位，其餘欄位一律不要出現。可用欄位：jp(日文單字或句型)、meaning(繁體中文意思)、pos(名詞/動詞/形容詞/副詞/其他)、examples(陣列，每項 {jp:日文例句, zh:繁體中文翻譯})。例句一律用禮貌體（丁寧体，です・ます），語氣以男性／中性為主。【預設套用】檢查所有例句的語體：例句預設一律用禮貌體（丁寧体，です・ます）；若使用者原本提供的例句是普通体（常体），請改寫成禮貌體、盡量保留原意與詞彙，並把「整個 examples 陣列（含改寫後的例句）」放進回傳。但若使用者的指示明確要求「不要更動例句」，則以使用者為準、不回傳 examples；若例句本來就已是禮貌體且無需補充，也不要回傳 examples。不要產生讀音或注音（那由 App 用 kuromoji 處理）。只輸出 JSON，不要多餘文字。';
   try {
     const out = await askAI(settings, [{ role: 'system', text: sys }, { role: 'user', text: '目前卡片：' + JSON.stringify(cardForAI) + '\n指示：' + instruction }], { json: true });
     if (document.getElementById('assist-overlay').hidden) return; // 已被關掉 → 丟棄結果
